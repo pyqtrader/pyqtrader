@@ -1,0 +1,14 @@
+acct.py
+*.csv
+*.txt
+
+*/
+!Pyqtrader/
+!.system/
+!Apps/
+!Indicators/
+!Experts/
+!Scripts/
+!assets/
+
+test*

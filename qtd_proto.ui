@@ -1,0 +1,864 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1068</width>
+    <height>701</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>MainWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QGridLayout" name="gridLayout">
+    <item row="0" column="0">
+     <widget class="QMdiArea" name="mdiArea"/>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1068</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionNew"/>
+    <addaction name="actionOpen"/>
+    <addaction name="actionSave_As"/>
+    <addaction name="separator"/>
+    <addaction name="actionLogin"/>
+   </widget>
+   <widget class="QMenu" name="menuWindow">
+    <property name="title">
+     <string>Window</string>
+    </property>
+    <addaction name="actionTile"/>
+    <addaction name="actionCascade"/>
+    <addaction name="actionStatus_Bar"/>
+    <addaction name="actionTabbed_View"/>
+   </widget>
+   <widget class="QMenu" name="menuChart">
+    <property name="title">
+     <string>Chart</string>
+    </property>
+    <widget class="QMenu" name="menuSet_Profile">
+     <property name="title">
+      <string>Set Profile</string>
+     </property>
+    </widget>
+    <widget class="QMenu" name="menuAdd_Profile">
+     <property name="title">
+      <string>Add Profile</string>
+     </property>
+    </widget>
+    <widget class="QMenu" name="menuRemove_Profile">
+     <property name="title">
+      <string>Remove Profile</string>
+     </property>
+    </widget>
+    <widget class="QMenu" name="menuAdd_Restore_Chart_to_Profile">
+     <property name="title">
+      <string>Add/Restore Chart to Profile</string>
+     </property>
+    </widget>
+    <addaction name="actionPrice_Line"/>
+    <addaction name="actionSymbol"/>
+    <addaction name="actionDescription"/>
+    <addaction name="actionTimeframe"/>
+    <addaction name="actionGrid"/>
+    <addaction name="actionRefresh"/>
+    <addaction name="separator"/>
+    <addaction name="actionChartProperties"/>
+    <addaction name="separator"/>
+    <addaction name="menuSet_Profile"/>
+    <addaction name="menuAdd_Profile"/>
+    <addaction name="menuAdd_Restore_Chart_to_Profile"/>
+    <addaction name="menuRemove_Profile"/>
+    <addaction name="separator"/>
+    <addaction name="actionEmpty_Profile_Bin"/>
+    <addaction name="separator"/>
+   </widget>
+   <widget class="QMenu" name="menuInsert">
+    <property name="title">
+     <string>Insert</string>
+    </property>
+    <widget class="QMenu" name="menuIndicators">
+     <property name="title">
+      <string>Indicators</string>
+     </property>
+     <addaction name="actionAverage_True_Range"/>
+     <addaction name="actionBollinger_Bands"/>
+     <addaction name="actionMACD"/>
+     <addaction name="actionMoving_Average"/>
+     <addaction name="actionRelative_Strength_Index"/>
+     <addaction name="actionStochastic"/>
+    </widget>
+    <addaction name="menuIndicators"/>
+   </widget>
+   <widget class="QMenu" name="menuTools">
+    <property name="title">
+     <string>Tools</string>
+    </property>
+    <addaction name="actionUser_Apps"/>
+    <addaction name="actionHistory"/>
+    <addaction name="actionSettings"/>
+   </widget>
+   <widget class="QMenu" name="menuEdit">
+    <property name="title">
+     <string>Edit</string>
+    </property>
+    <addaction name="actionCopy"/>
+    <addaction name="actionCopy_Line"/>
+    <addaction name="actionSelect_All"/>
+    <addaction name="actionDeselect"/>
+    <addaction name="actionDelete"/>
+    <addaction name="actionUndo_Delete"/>
+   </widget>
+   <widget class="QMenu" name="menuHelp">
+    <property name="title">
+     <string>Help</string>
+    </property>
+    <addaction name="actionAbout"/>
+    <addaction name="actionLicense"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuEdit"/>
+   <addaction name="menuChart"/>
+   <addaction name="menuInsert"/>
+   <addaction name="menuTools"/>
+   <addaction name="menuWindow"/>
+   <addaction name="menuHelp"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <widget class="QToolBar" name="toolBarForAccessories">
+   <property name="windowTitle">
+    <string>Accessories</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionCrossHair"/>
+   <addaction name="actionExport"/>
+   <addaction name="actionMagnet"/>
+  </widget>
+  <widget class="QToolBar" name="toolBarForCharTypes">
+   <property name="windowTitle">
+    <string>Chart Types</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionBarChart"/>
+   <addaction name="actionCandleChart"/>
+   <addaction name="actionLineChart"/>
+  </widget>
+  <widget class="QToolBar" name="tooBarForExperts">
+   <property name="windowTitle">
+    <string>Experts</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionExperts"/>
+  </widget>
+  <widget class="QToolBar" name="toolBarForTimeframes">
+   <property name="windowTitle">
+    <string>Timeframes</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionM1"/>
+   <addaction name="actionM5"/>
+   <addaction name="actionM15"/>
+   <addaction name="actionM30"/>
+   <addaction name="actionH1"/>
+   <addaction name="actionH4"/>
+   <addaction name="actionD1"/>
+   <addaction name="actionW1"/>
+  </widget>
+  <widget class="QToolBar" name="toolBarForDrawings">
+   <property name="windowTitle">
+    <string>Drawings</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionDrawTrendLine"/>
+   <addaction name="actionDrawHorLine"/>
+   <addaction name="actionDrawVerLine"/>
+   <addaction name="actionDrawChannel"/>
+   <addaction name="actionDrawPitchfork"/>
+   <addaction name="actionDrawFibo"/>
+   <addaction name="actionDrawFiboExt"/>
+   <addaction name="actionDrawEllipse"/>
+   <addaction name="actionDrawRectangle"/>
+   <addaction name="actionDraw_Text"/>
+   <addaction name="actionDraw_Label"/>
+  </widget>
+  <widget class="QToolBar" name="toolBarforElliott">
+   <property name="windowTitle">
+    <string>Elliott</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionElliott_Impulse"/>
+   <addaction name="actionElliott_Correction"/>
+   <addaction name="actionElliott_Extended_Correction"/>
+  </widget>
+  <widget class="QToolBar" name="toolBarforPolylines">
+   <property name="windowTitle">
+    <string>Polylines</string>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionDrawArrow"/>
+   <addaction name="actionDrawPolyline"/>
+   <addaction name="actionDrawPolyArrow"/>
+  </widget>
+  <action name="actionMN">
+   <property name="text">
+    <string>MN</string>
+   </property>
+   <property name="toolTip">
+    <string>Monthly timeframe</string>
+   </property>
+  </action>
+  <action name="actionW1">
+   <property name="text">
+    <string>W</string>
+   </property>
+   <property name="toolTip">
+    <string>Weekly timeframe</string>
+   </property>
+  </action>
+  <action name="actionD1">
+   <property name="text">
+    <string>D</string>
+   </property>
+   <property name="toolTip">
+    <string>Daily timeframe</string>
+   </property>
+  </action>
+  <action name="actionH4">
+   <property name="checkable">
+    <bool>false</bool>
+   </property>
+   <property name="checked">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>H4</string>
+   </property>
+   <property name="toolTip">
+    <string>4-hour timeframe</string>
+   </property>
+  </action>
+  <action name="actionH1">
+   <property name="text">
+    <string>H1</string>
+   </property>
+   <property name="toolTip">
+    <string>Hourly timeframe</string>
+   </property>
+  </action>
+  <action name="actionM30">
+   <property name="text">
+    <string>M30</string>
+   </property>
+   <property name="toolTip">
+    <string>30-minute timeframe</string>
+   </property>
+  </action>
+  <action name="actionM15">
+   <property name="checkable">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>M15</string>
+   </property>
+   <property name="toolTip">
+    <string>15-minute timeframe</string>
+   </property>
+  </action>
+  <action name="actionM5">
+   <property name="text">
+    <string>M5</string>
+   </property>
+   <property name="toolTip">
+    <string>5-minute timeframe</string>
+   </property>
+  </action>
+  <action name="actionM1">
+   <property name="text">
+    <string>M1</string>
+   </property>
+   <property name="toolTip">
+    <string>1-minute timeframe</string>
+   </property>
+  </action>
+  <action name="actionNew">
+   <property name="text">
+    <string>New</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+N</string>
+   </property>
+  </action>
+  <action name="actionTile">
+   <property name="text">
+    <string>Tile</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+R</string>
+   </property>
+  </action>
+  <action name="actionCascade">
+   <property name="text">
+    <string>Cascade</string>
+   </property>
+  </action>
+  <action name="actionCandleChart">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/candles.png</normaloff>Pyqtrader/.system/assets/candles.png</iconset>
+   </property>
+   <property name="text">
+    <string>C</string>
+   </property>
+   <property name="toolTip">
+    <string>Candle chart</string>
+   </property>
+  </action>
+  <action name="actionBarChart">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/bar.png</normaloff>Pyqtrader/.system/assets/bar.png</iconset>
+   </property>
+   <property name="text">
+    <string>B</string>
+   </property>
+   <property name="toolTip">
+    <string>Bar chart</string>
+   </property>
+  </action>
+  <action name="actionLineChart">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/line.png</normaloff>Pyqtrader/.system/assets/line.png</iconset>
+   </property>
+   <property name="text">
+    <string>L</string>
+   </property>
+   <property name="toolTip">
+    <string>Line Chart</string>
+   </property>
+  </action>
+  <action name="actionDrawTrendLine">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/DrawLine.png</normaloff>Pyqtrader/.system/assets/DrawLine.png</iconset>
+   </property>
+   <property name="text">
+    <string>Li</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw Trend Line</string>
+   </property>
+  </action>
+  <action name="actionDrawEllipse">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/ellipse.png</normaloff>Pyqtrader/.system/assets/ellipse.png</iconset>
+   </property>
+   <property name="text">
+    <string>El</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw Ellipse</string>
+   </property>
+  </action>
+  <action name="actionCrossHair">
+   <property name="checkable">
+    <bool>false</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/crosshair.png</normaloff>Pyqtrader/.system/assets/crosshair.png</iconset>
+   </property>
+   <property name="text">
+    <string>Ch</string>
+   </property>
+   <property name="toolTip">
+    <string>CrossHair; Middle-click to toggle</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+F</string>
+   </property>
+  </action>
+  <action name="actionDrawRectangle">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/rectangle.png</normaloff>Pyqtrader/.system/assets/rectangle.png</iconset>
+   </property>
+   <property name="text">
+    <string>Re</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw Rectangle</string>
+   </property>
+  </action>
+  <action name="actionDrawHorLine">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/horizontal_line.png</normaloff>Pyqtrader/.system/assets/horizontal_line.png</iconset>
+   </property>
+   <property name="text">
+    <string>Hl</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw Horizontal Line</string>
+   </property>
+  </action>
+  <action name="actionDrawVerLine">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/vline.png</normaloff>Pyqtrader/.system/assets/vline.png</iconset>
+   </property>
+   <property name="text">
+    <string>Vl</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw Vertical Line</string>
+   </property>
+  </action>
+  <action name="actionExport">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/camera.png</normaloff>Pyqtrader/.system/assets/camera.png</iconset>
+   </property>
+   <property name="text">
+    <string>Ex</string>
+   </property>
+   <property name="toolTip">
+    <string>Export</string>
+   </property>
+  </action>
+  <action name="actionSymbol">
+   <property name="text">
+    <string>Symbol</string>
+   </property>
+   <property name="toolTip">
+    <string>Change Symbol</string>
+   </property>
+   <property name="shortcut">
+    <string>Space</string>
+   </property>
+  </action>
+  <action name="actionPrice_Line">
+   <property name="checkable">
+    <bool>false</bool>
+   </property>
+   <property name="text">
+    <string>Price Line</string>
+   </property>
+  </action>
+  <action name="actionDescription">
+   <property name="text">
+    <string>Description</string>
+   </property>
+  </action>
+  <action name="actionTimeframe">
+   <property name="text">
+    <string>Timeframe</string>
+   </property>
+  </action>
+  <action name="actionEmpty_Profile_Bin">
+   <property name="text">
+    <string>Empty Profile Bin</string>
+   </property>
+  </action>
+  <action name="actionMoving_Average">
+   <property name="text">
+    <string>Moving Average</string>
+   </property>
+  </action>
+  <action name="actionRelative_Strength_Index">
+   <property name="text">
+    <string>Relative Strength Index</string>
+   </property>
+  </action>
+  <action name="actionStochastic">
+   <property name="text">
+    <string>Stochastic</string>
+   </property>
+  </action>
+  <action name="actionMACD">
+   <property name="text">
+    <string>MACD</string>
+   </property>
+  </action>
+  <action name="actionBollinger_Bands">
+   <property name="text">
+    <string>Bollinger Bands</string>
+   </property>
+  </action>
+  <action name="actionAverage_True_Range">
+   <property name="text">
+    <string>Average True Range</string>
+   </property>
+  </action>
+  <action name="actionDrawFibo">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/fibo.png</normaloff>Pyqtrader/.system/assets/fibo.png</iconset>
+   </property>
+   <property name="text">
+    <string>Fib</string>
+   </property>
+   <property name="toolTip">
+    <string>Fibonacci</string>
+   </property>
+  </action>
+  <action name="actionDrawFiboExt">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/fibo_ext.png</normaloff>Pyqtrader/.system/assets/fibo_ext.png</iconset>
+   </property>
+   <property name="text">
+    <string>FibE</string>
+   </property>
+   <property name="toolTip">
+    <string>Fibonacci Extension</string>
+   </property>
+  </action>
+  <action name="actionDrawChannel">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/channel.png</normaloff>Pyqtrader/.system/assets/channel.png</iconset>
+   </property>
+   <property name="text">
+    <string>Channel</string>
+   </property>
+   <property name="toolTip">
+    <string>Channel</string>
+   </property>
+  </action>
+  <action name="actionDrawPitchfork">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/pitchfork.png</normaloff>Pyqtrader/.system/assets/pitchfork.png</iconset>
+   </property>
+   <property name="text">
+    <string>Pitchfork</string>
+   </property>
+   <property name="toolTip">
+    <string>Pitchfork</string>
+   </property>
+  </action>
+  <action name="actionElliott_Impulse">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/elliott5.png</normaloff>Pyqtrader/.system/assets/elliott5.png</iconset>
+   </property>
+   <property name="text">
+    <string>Elliott Impulse</string>
+   </property>
+   <property name="toolTip">
+    <string>Elliott Impulse</string>
+   </property>
+  </action>
+  <action name="actionElliott_Correction">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/elliott3.png</normaloff>Pyqtrader/.system/assets/elliott3.png</iconset>
+   </property>
+   <property name="text">
+    <string>Elliott Correction</string>
+   </property>
+   <property name="toolTip">
+    <string>Elliott Correction</string>
+   </property>
+  </action>
+  <action name="actionElliott_Extended_Correction">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/elliott5c.png</normaloff>Pyqtrader/.system/assets/elliott5c.png</iconset>
+   </property>
+   <property name="text">
+    <string>Elliott Extended Correction</string>
+   </property>
+   <property name="toolTip">
+    <string>Elliott Extended Correction</string>
+   </property>
+  </action>
+  <action name="actionDraw_Text">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/text.png</normaloff>Pyqtrader/.system/assets/text.png</iconset>
+   </property>
+   <property name="text">
+    <string>Draw Text</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw Text</string>
+   </property>
+  </action>
+  <action name="actionDraw_Label">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/label.png</normaloff>Pyqtrader/.system/assets/label.png</iconset>
+   </property>
+   <property name="text">
+    <string>Draw Label</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw Label</string>
+   </property>
+  </action>
+  <action name="actionDrawPolyline">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/polyline.png</normaloff>Pyqtrader/.system/assets/polyline.png</iconset>
+   </property>
+   <property name="text">
+    <string>DrawPolyline</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw PolyLine; Right-click to stop</string>
+   </property>
+  </action>
+  <action name="actionDrawArrow">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/arrow.png</normaloff>Pyqtrader/.system/assets/arrow.png</iconset>
+   </property>
+   <property name="text">
+    <string>DrawArrow</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw Arrow</string>
+   </property>
+  </action>
+  <action name="actionDrawPolyArrow">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/polyarrow.png</normaloff>Pyqtrader/.system/assets/polyarrow.png</iconset>
+   </property>
+   <property name="text">
+    <string>DrawPolyArrow</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw PolyArrow; Right-click to stop</string>
+   </property>
+  </action>
+  <action name="actionLogin">
+   <property name="text">
+    <string>Login</string>
+   </property>
+  </action>
+  <action name="actionHistory">
+   <property name="text">
+    <string>History</string>
+   </property>
+  </action>
+  <action name="actionMagnet">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/magnet.png</normaloff>Pyqtrader/.system/assets/magnet.png</iconset>
+   </property>
+   <property name="text">
+    <string>Magnet</string>
+   </property>
+   <property name="toolTip">
+    <string>Magnet, Alt+M</string>
+   </property>
+   <property name="shortcut">
+    <string>Alt+M</string>
+   </property>
+  </action>
+  <action name="actionOpen">
+   <property name="text">
+    <string>Open</string>
+   </property>
+  </action>
+  <action name="actionSave_As">
+   <property name="text">
+    <string>Save As</string>
+   </property>
+  </action>
+  <action name="actionChartProperties">
+   <property name="text">
+    <string>Properties</string>
+   </property>
+  </action>
+  <action name="actionGrid">
+   <property name="text">
+    <string>Grid</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+G</string>
+   </property>
+  </action>
+  <action name="actionRefresh">
+   <property name="text">
+    <string>Refresh</string>
+   </property>
+  </action>
+  <action name="actionUser_Apps">
+   <property name="text">
+    <string>User Apps</string>
+   </property>
+  </action>
+  <action name="actionExperts">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/off-icon.png</normaloff>
+     <normalon>Pyqtrader/.system/assets/on-icon.png</normalon>Pyqtrader/.system/assets/off-icon.png</iconset>
+   </property>
+   <property name="text">
+    <string>Experts</string>
+   </property>
+  </action>
+  <action name="actionObjects">
+   <property name="text">
+    <string>Objects</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
+   </property>
+  </action>
+  <action name="actionSettings">
+   <property name="text">
+    <string>Settings</string>
+   </property>
+  </action>
+  <action name="actionTabbed_View">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Tabbed View</string>
+   </property>
+  </action>
+  <action name="actionSelect_All">
+   <property name="text">
+    <string>Select All</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+A</string>
+   </property>
+  </action>
+  <action name="actionDelete">
+   <property name="text">
+    <string>Delete</string>
+   </property>
+   <property name="shortcut">
+    <string>Del</string>
+   </property>
+  </action>
+  <action name="actionCopy">
+   <property name="text">
+    <string>Copy</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+C</string>
+   </property>
+  </action>
+  <action name="actionUndo_Delete">
+   <property name="text">
+    <string>Undo Delete</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Z</string>
+   </property>
+  </action>
+  <action name="actionDeselect">
+   <property name="text">
+    <string>Deselect</string>
+   </property>
+   <property name="shortcut">
+    <string>Esc</string>
+   </property>
+  </action>
+  <action name="actionStatus_Bar">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Status Bar</string>
+   </property>
+  </action>
+  <action name="actionCopy_Line">
+   <property name="text">
+    <string>Copy Line</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Alt+C</string>
+   </property>
+  </action>
+  <action name="actionLight_Mode">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Light Mode</string>
+   </property>
+  </action>
+  <action name="actionAbout">
+   <property name="text">
+    <string>About</string>
+   </property>
+  </action>
+  <action name="actionLicense">
+   <property name="text">
+    <string>License</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
