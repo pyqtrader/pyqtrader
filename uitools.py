@@ -1051,5 +1051,4 @@ class TreeSubWindow(QtWidgets.QMdiSubWindow):
         self.mdi.removeSubWindow(self)
         return super().closeEvent(closeEvent)
 
-if __name__=='__main__':
-    pass
+

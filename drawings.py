@@ -2640,16 +2640,3 @@ class NewThread(QtCore.QThread):
         # self.loop.exec()
         super().run()
 
-if __name__=="__main__":
-    from PySide6.QtWidgets import QApplication
-    import sys
-
-    x=[2,3,4,5,7]
-    y=[4,6,8,9,11]
-    
-    app = QApplication(sys.argv)
-    plt=AltPlotWidget(draw_mode="DrawLine")
-    item=plt.plot(x,y)
-    plt.show()
-    sys.exit(app.exec())
-    #

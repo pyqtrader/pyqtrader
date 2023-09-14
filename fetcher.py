@@ -220,18 +220,3 @@ class Fetcher(QtCore.QObject):
             fromdt=None, todt=None, count=1,timeframe=timeframe, indexcut=0)
         return a
 
-if __name__=='__main__':
-    pass
-
-    # print(histparams(cfg.TIMEFRAMES['D1'],'EURUSD'))
-
-    # print(fetch_data(record=True,symbol='NZDUSD',count=20))
-
-    # app=pg.mkQApp()    
-    # timer = pg.QtCore.QTimer()
-    # timer.timeout.connect(lambda *args: print(fetch_lc(timeframe=cfg.PERIOD_M1)))
-    # timer.start(5000)
-    # app.exec()
-    # for key in oa_dict:
-    #     fetch_data(granularity=key)
-    #     time.sleep(3)

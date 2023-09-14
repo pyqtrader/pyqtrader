@@ -1141,34 +1141,3 @@ def matcher(tseries,yvals,shift=0):
         res=[ticks,yvals]
     
     return res
-
-if __name__=='__main__':
-    pass
-    # from backup.cbox import Ui_MainWindow
-    # from pyqtgraph import mkQApp,plot
-    # from numpy import sin
-    # class MyWindow(QMainWindow):
-    #     def __init__(self,plt=None,ts=None) -> None:
-    #         super().__init__()
-    #         self.ui = Ui_MainWindow()
-    #         self.ui.setupUi(self)
-    #         if plt!=None:
-    #             self.setCentralWidget(plt)
-    #             if ts!=None:
-    #                 self.ui.actionIndicator.triggered.connect(lambda *args: MADialog(plt,ts))
-
-    # app=mkQApp()
-    # count=100
-    # f=[]
-    # for i in range(count):
-    #     f.append(i+30*sin(i))
-    #     # a = i if i<50 else i-25
-    #     # f.append(a)
-    # plt=plot(f)
-    # # x,y=sma(f,period=20,shift=10)
-    # # smaitem=PlotCurveItem(x,y)
-    # # smaitem.setPen(color='r')
-    # # plt.addItem(smaitem)
-    # mw=MyWindow(plt,f)
-    # mw.show()
-    # app.exec()

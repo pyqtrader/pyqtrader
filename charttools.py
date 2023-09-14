@@ -222,5 +222,3 @@ def is_linux():
 def is_windows():
     return sys.platform in ('win32','cygwin','msys')
 
-if __name__=='__main__':
-    pass

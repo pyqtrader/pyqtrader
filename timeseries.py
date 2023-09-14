@@ -303,23 +303,4 @@ def PlotTimeseries(symbol,ct,tf=None,ts=None,session=None,fetch=None,
         item = CandleBarItem(ct,tseries,start,end,chartprops=chartprops)
 
     return item
-   
-
-## Start Qt event loop unless running in interactive mode or using pyside.
-if __name__ == '__main__':
-    
-    item =PlotTimeseries(cfg.D_SYMBOL, cfg.D_CHARTTYPE,cfg.PERIOD_D1)
-    ts_lc=item.timeseries
-    ts_lc.data=[item.timeseries.data[-1]]
-    t=ts_lc.data[0]
-    ts_lc.data[0][0]+=item.timeframe
-    item_lc=PlotTimeseries(cfg.D_SYMBOL, cfg.D_CHARTTYPE,cfg.PERIOD_D1,ts_lc)
-    plt = pg.plot()
-    xax=ovrd.AltDateAxisItem(item.times,item.last_tick,item.timeframe)
-    plt.setAxisItems({"bottom":xax})
-    plt.setWindowTitle('pyqtgraph example: customGraphicsItem')
-    plt.addItem(item)
-    plt.addItem(item_lc)
-
-    pg.mkQApp().exec()
     
