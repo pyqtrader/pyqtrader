@@ -117,8 +117,8 @@ class Fetcher(QtCore.QObject):
             datasource=cfg.DATA_SYMBOLS_DIR+symbol+'_'+oa_dict[granularity]['tf']+'.csv'
             if os.path.isfile(datasource) and os.stat(datasource).st_size!=0:
                 saved_df=pd.read_csv(datasource)
-                indexcut=int(saved_df.iloc[-1][0]+1)
-                fromdt=saved_df.iloc[-1][1]+timeframe
+                indexcut=int(saved_df.iloc[-1].iloc[0]+1)
+                fromdt=saved_df.iloc[-1].iloc[1]+timeframe
 
         if fromdt is None:
             params = dict(count=count,granularity = granularity,smooth=OA_SMOOTH, price=OA_PRICE)
@@ -193,8 +193,8 @@ class Fetcher(QtCore.QObject):
             # candles_df.index=candles_df.index+indexcut
         
             if saved_df is not None: #double check to ensure non-duplication of candles
-                c=candles_df.iloc[0][0] #time stamp
-                s=saved_df.iloc[-1][1] #time stamp
+                c=candles_df.iloc[0].iloc[0] #time stamp
+                s=saved_df.iloc[-1].iloc[1] #time stamp
                 if c==s:
                     our_data.pop(0) #remove duplicating entry
                     candles_df=dfreader(our_data)
