@@ -1141,13 +1141,13 @@ class MDIWindow(QtWidgets.QMainWindow):
 
     def set_theme(self):
         if self.props['theme']==cfg.THEMES['Light']:
-            self.app.setPalette(self.palet) #resets palette
+            # self.app.setPalette(self.palet) #resets palette
             styles.set_light_theme(self)
         elif self.props['theme']==cfg.THEMES['Dark']:
-            self.app.setPalette(self.palet) #resets palette
+            # self.app.setPalette(self.palet) #resets palette
             styles.set_dark_theme(self)
         elif self.props['theme']==cfg.THEMES['Darker']:
-            self.app.setPalette(self.palet) #resets palette
+            # self.app.setPalette(self.palet) #resets palette
             styles.set_darker_theme(self)
         else:
             # self.app.setPalette(s:=self.app.style().standardPalette())
