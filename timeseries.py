@@ -10,20 +10,6 @@ import fetcher as ftch, fetcher
 
 from _debugger import _print,_p,_pc,_printcallers,_c,_exinfo,_ptime
 
-class _Series:
-    def __init__(self,ts,start=None,end=None) -> None:
-        self.update(ts,start=start,end=end)
-
-    def update(self,ts,start=None,end=None):
-        self.symbol=ts.symbol
-        self.timeframe=self.tf=ts.timeframe
-        self.data=ts.data[start:end]
-        self.times=ts.times[start:end]
-        self.opens=ts.opens[start:end]
-        self.highs=ts.highs[start:end]
-        self.lows=ts.lows[start:end]
-        self.closes=ts.closes[start:end]
-
 class Timeseries:
     def __init__(self,session=None,fetch=None,symbol=cfg.D_SYMBOL,timeframe=cfg.D_TIMEFRAME,count=cfg.D_BARCOUNT):
         super().__init__()

@@ -986,10 +986,11 @@ class BBItem(StudyCurveItem):
         mode=self.funkvars['mode']
         mas=self.values[1]
         ts=self.timeseries
+        st=None
         if not self.init_bands:
             mas=mas[-3:]
-            ts=tmss._Series(ts,start=-2-period)
-        vs=study_inputs(ts,mode=mode)
+            st=-2-period
+        vs=study_inputs(ts,start=st,mode=mode)
         diff=len(vs)-len(mas)
         for i,val in enumerate(mas):
             dev=0
@@ -1049,13 +1050,16 @@ class ATRItem(StudyCurveItem):
     def computef(self,ts=None):
         tseries=self.timeseries if ts is None else ts
         fv=self.funkvars
+        st=0
         if self.cache_event:
             st=-2-fv['period']
-            tseries=tmss._Series(tseries,start=st)
         tr=[] #true range
-        for i in range(1,len(tseries.closes)):
-            tr.append(max(tseries.highs[i]-tseries.lows[i],abs(tseries.highs[i]-tseries.closes[i-1]),
-                abs(tseries.lows[i]-tseries.closes[i-1])))
+        for i in range(1+st,len(tseries.closes) if not self.cache_event else 0):
+            try:
+                tr.append(max(tseries.highs[i]-tseries.lows[i],abs(tseries.highs[i]-tseries.closes[i-1]),
+                    abs(tseries.lows[i]-tseries.closes[i-1])))
+            except:
+                _p(i, len(tseries.closes))
         return calc_ma(tr,period=fv['period'])
 
 def study_inputs(tseries,start=None,end=None,mode=cfg.D_STUDYMODE):

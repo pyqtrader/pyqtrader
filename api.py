@@ -63,7 +63,7 @@ class apiBase:
 
     @property
     def series(self):
-        return timeseries._Series(self.timeseries)
+        return self.timeseries
     
     @property
     def yvalues(self):
