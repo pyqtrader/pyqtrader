@@ -2166,12 +2166,14 @@ class CrossHair:
         self.ay=plt.getAxis('right')
 
         self.plt=plt
+        self.lct=self.plt.lc_thread
         self.pre=chtl.precision(self.plt.chartitem.symbol)
         
         try: self.refresh()
         except Exception: pass
 
-        self.plt.lc_thread.sigLastCandleUpdated.connect(self.refresh_lc)
+        if self.lct is not None:
+            self.lct.sigLastCandleUpdated.connect(self.refresh_lc)
         self.plt.vb.sigStateChanged.connect(self.refresh)
         self.plt.sigTimeseriesChanged.connect(self.refresh)
         self.plt.scene().sigMouseMoved.connect(self.refresh)
@@ -2207,15 +2209,16 @@ class CrossHair:
         self.textY.setText("{:.{pr}f}".format(y,pr=self.pre))
         self.textY.setFontSize(cfg.D_FONTSIZE)
 
-        try:           
-            self.textOHLC.setPos(x0,y1)
-            self.textOHLC.setText("O:{:.{pr}f}".format(ts.opens[ind], pr=self.pre)+
-            " H:{:.{pr}f}".format(ts.highs[ind], pr=self.pre)+
-            " L:{:.{pr}f}".format(ts.lows[ind],pr=self.pre)+
-            " C:{:.{pr}f}".format(ts.closes[ind],pr=self.pre))
-            self.textOHLC.setFontSize(cfg.D_FONTSIZE)
-        except Exception:
-            pass
+        if self.lct is not None:
+            try:           
+                self.textOHLC.setPos(x0,y1)
+                self.textOHLC.setText("O:{:.{pr}f}".format(ts.opens[ind], pr=self.pre)+
+                " H:{:.{pr}f}".format(ts.highs[ind], pr=self.pre)+
+                " L:{:.{pr}f}".format(ts.lows[ind],pr=self.pre)+
+                " C:{:.{pr}f}".format(ts.closes[ind],pr=self.pre))
+                self.textOHLC.setFontSize(cfg.D_FONTSIZE)
+            except Exception:
+                pass
 
     def __del__(self):
         self.plt.removeItem(self.vLine)
