@@ -535,12 +535,16 @@ def study_item_factory(base):
             ytext=self.values[1][index]
             return '{}({},{})\n{}\n{:.{pr}f}'.format(self.ttname,self.funkvars['period'],
                 self.funkvars['mode'],xtext,ytext,pr=pre)
+        
+        @chtl.string_to_html(text_color='black')
+        def html_ttip(self):
+            return self.ttip()
 
         def hoverEvent(self, ev):
             if self.hover_on==True:
                 try:
                     if self.mouseShape().contains(ev.pos()):
-                        self.setToolTip(self.ttip())  
+                        self.setToolTip(self.html_ttip())  
                     else:
                         self.setToolTip('')
                 except Exception:

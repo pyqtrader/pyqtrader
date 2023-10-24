@@ -462,6 +462,10 @@ def api_study_factory(base):
                 res='{}\n{}\n{:.{pr}f}'.format(self.fname,xtext,ytext,pr=pre)
                 return res
         
+        @chtl.string_to_html(text_color='black')
+        def html_ttip(self):
+            return self.ttip()
+        
         def label_t(self): #full override
             sm=self.smodule
             if hasattr(sm,'PQstudylabel'):
@@ -472,7 +476,7 @@ def api_study_factory(base):
         def hoverEvent(self, ev, subitem=None):
             obj=self if subitem is None else subitem
             if self.hover_on==True:
-                obj.setToolTip(self.ttip())
+                obj.setToolTip(self.html_ttip())
         
         def create_subitem(self, itype, values=(0, 0), **kwargs):
             si=super().create_subitem(itype, values, **kwargs)

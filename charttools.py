@@ -222,3 +222,14 @@ def is_linux():
 def is_windows():
     return sys.platform in ('win32','cygwin','msys')
 
+def string_to_html(text_color='black'):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            result = func(*args, **kwargs)
+            # Replace newline characters with the <br> tag
+            formatted_text = result.replace('\n', '<br>')
+            # Create the HTML-formatted tooltip with the specified text color
+            output_text = f'<font color="{text_color}">{formatted_text}</font>'
+            return output_text
+        return wrapper
+    return decorator
