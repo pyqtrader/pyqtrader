@@ -77,6 +77,7 @@ class Fetcher(QtCore.QObject):
     def __init__(self, *args,**kwargs):
         super().__init__(*args,**kwargs)
         self.connected=False
+        self.offline_mode=False
         self.acct=self._acct()
 
     @property
@@ -119,6 +120,11 @@ class Fetcher(QtCore.QObject):
                 saved_df=pd.read_csv(datasource)
                 indexcut=int(saved_df.iloc[-1].iloc[0]+1)
                 fromdt=saved_df.iloc[-1].iloc[1]+timeframe
+
+        #--------- breakpoint for the offline mode:
+        if self.offline_mode:
+            return {'data': datalist,'complete': True}
+        ############
 
         if fromdt is None:
             params = dict(count=count,granularity = granularity,smooth=OA_SMOOTH, price=OA_PRICE)
@@ -216,7 +222,10 @@ class Fetcher(QtCore.QObject):
         return {'data': datalist,'complete':lc_complete}
 
     def fetch_lc(self,session=None,symbol=cfg.D_SYMBOL,timeframe=cfg.D_TIMEFRAME): #fetch last candle       
-        a=self.fetch_data(session=session,record=False,symbol=symbol, 
-            fromdt=None, todt=None, count=1,timeframe=timeframe, indexcut=0)
-        return a
+        if self.offline_mode:
+            return None
+        else:
+            a=self.fetch_data(session=session,record=False,symbol=symbol, 
+                fromdt=None, todt=None, count=1,timeframe=timeframe, indexcut=0)
+            return a
 

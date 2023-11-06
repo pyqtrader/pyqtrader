@@ -3,7 +3,7 @@
 ################################################################################
 ## Form generated from reading UI file 'qtd_proto.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.4.1
+## Created by: Qt User Interface Compiler version 6.6.0
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -245,6 +245,9 @@ class Ui_MainWindow(object):
         self.actionAbout.setObjectName(u"actionAbout")
         self.actionLicense = QAction(MainWindow)
         self.actionLicense.setObjectName(u"actionLicense")
+        self.actionOffline = QAction(MainWindow)
+        self.actionOffline.setObjectName(u"actionOffline")
+        self.actionOffline.setCheckable(True)
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
         self.gridLayout = QGridLayout(self.centralwidget)
@@ -318,6 +321,7 @@ class Ui_MainWindow(object):
         self.menuFile.addAction(self.actionNew)
         self.menuFile.addAction(self.actionOpen)
         self.menuFile.addAction(self.actionSave_As)
+        self.menuFile.addAction(self.actionOffline)
         self.menuFile.addSeparator()
         self.menuFile.addAction(self.actionLogin)
         self.menuWindow.addAction(self.actionTile)
@@ -604,6 +608,7 @@ class Ui_MainWindow(object):
         self.actionLight_Mode.setText(QCoreApplication.translate("MainWindow", u"Light Mode", None))
         self.actionAbout.setText(QCoreApplication.translate("MainWindow", u"About", None))
         self.actionLicense.setText(QCoreApplication.translate("MainWindow", u"License", None))
+        self.actionOffline.setText(QCoreApplication.translate("MainWindow", u"Offline", None))
         self.menuFile.setTitle(QCoreApplication.translate("MainWindow", u"File", None))
         self.menuWindow.setTitle(QCoreApplication.translate("MainWindow", u"Window", None))
         self.menuChart.setTitle(QCoreApplication.translate("MainWindow", u"Chart", None))

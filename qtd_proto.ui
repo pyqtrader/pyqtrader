@@ -36,6 +36,7 @@
     <addaction name="actionNew"/>
     <addaction name="actionOpen"/>
     <addaction name="actionSave_As"/>
+    <addaction name="actionOffline"/>
     <addaction name="separator"/>
     <addaction name="actionLogin"/>
    </widget>
@@ -856,6 +857,14 @@
   <action name="actionLicense">
    <property name="text">
     <string>License</string>
+   </property>
+  </action>
+  <action name="actionOffline">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Offline</string>
    </property>
   </action>
  </widget>

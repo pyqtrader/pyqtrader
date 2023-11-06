@@ -177,6 +177,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionNew.triggered.connect(lambda *args: self.window_act("New"))
         self.ui.actionOpen.triggered.connect(lambda *args: self.window_act('Open'))
         self.ui.actionSave_As.triggered.connect(lambda *args: self.window_act('Save As'))
+        self.ui.actionOffline.triggered.connect(lambda *args: self.window_act('Offline'))
         self.ui.actionLogin.triggered.connect(lambda *args: self.window_act('Login'))
         #Edit
         self.ui.actionCopy.triggered.connect(self.copy_item_act)
@@ -275,6 +276,8 @@ class MDIWindow(QtWidgets.QMainWindow):
                 props=wind['props'] 
                 self.props=props #props need to be assigned before subwindows to ensure that non-item props (like magnet)
                                     #are available before when subwindows are processed
+                if 'Offline' in self.props:
+                    self.fetch.offline_mode=self.props['Offline']
                 #hide hidden toolbars/status bar
                 self.widgets_init()
                 self.set_theme()
@@ -309,6 +312,8 @@ class MDIWindow(QtWidgets.QMainWindow):
             self.toggle_status_bar(False)
         else:
             self.toggle_status_bar(True)
+        if 'Offline' in self.props and self.props['Offline'] is True:
+            self.ui.actionOffline.setChecked(True)
 
     #Profiles
         #add profile
@@ -977,6 +982,8 @@ class MDIWindow(QtWidgets.QMainWindow):
                     fname=fname+f'.{ext}'
                 with open(fname, 'w') as f:
                     f.write(stj)
+
+        
         
         if action in ('Symbol','Description','Timeframe'):
             proceed=True
@@ -1041,19 +1048,32 @@ class MDIWindow(QtWidgets.QMainWindow):
                     #print('Select chart window first')
 
         #############rerfesh block
-        def refresh_plot(tfname=None):
+        def refresh_plot(plt,tfname=None):
             try:
-                plt=self.mdi.activeSubWindow().plt
                 tfn=cfg.tf_to_label(plt.timeframe) if tfname is None else tfname          
                 cbl_replacer(self, plt, tfn)
             except Exception:
                 pass
 
+        if action=='Offline':
+            if action in self.props:
+                self.props[action]=not self.props[action]
+            else:
+                self.props[action]=True
+            
+            if self.fetch is not None:
+                self.fetch.offline_mode=self.props[action]
+                self.fetch.trigger()
+            for sw in self.mdi.subWindowList():
+                refresh_plot(sw.plt)
+
         if action in cfg.TIMEFRAMES or action in cfg.CHARTTYPES:
-            refresh_plot(action)
+            if (sw:=self.mdi.activeSubWindow()) is not None:
+                refresh_plot(sw.plt,tfname=action)
         
         if action=='Refresh':
-            refresh_plot()
+            if (sw:=self.mdi.activeSubWindow()) is not None:
+                refresh_plot(sw.plt)
 
         if action=='History':
             plt=self.mdi.activeSubWindow().plt
