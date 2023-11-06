@@ -21,7 +21,7 @@ def set_generic_theme(mwindow,
     dp.setColor(QPalette.Base,base)
     dp.setColor(QPalette.AlternateBase,alternate)
     # dp.setColor(QPalette.ToolTipBase,"white")
-    # dp.setColor(QPalette.ToolTipText,"white")
+    dp.setColor(QPalette.ToolTipText,"black")
     dp.setColor(QPalette.Text,text)
     dp.setColor(QPalette.Disabled,QPalette.Text,disabled)
     dp.setColor(QPalette.Dark,QColor(35,35,35))

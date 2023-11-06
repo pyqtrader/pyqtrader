@@ -1048,10 +1048,10 @@ class MDIWindow(QtWidgets.QMainWindow):
                     #print('Select chart window first')
 
         #############rerfesh block
-        def refresh_plot(plt,tfname=None):
+        def refresh_plot(sw,tfname=None):
             try:
-                tfn=cfg.tf_to_label(plt.timeframe) if tfname is None else tfname          
-                cbl_replacer(self, plt, tfn)
+                tfn=cfg.tf_to_label(sw.plt.timeframe) if tfname is None else tfname          
+                cbl_replacer(self, sw.plt, tfn)
             except Exception:
                 pass
 
@@ -1065,15 +1065,15 @@ class MDIWindow(QtWidgets.QMainWindow):
                 self.fetch.offline_mode=self.props[action]
                 self.fetch.trigger()
             for sw in self.mdi.subWindowList():
-                refresh_plot(sw.plt)
+                refresh_plot(sw)
 
         if action in cfg.TIMEFRAMES or action in cfg.CHARTTYPES:
             if (sw:=self.mdi.activeSubWindow()) is not None:
-                refresh_plot(sw.plt,tfname=action)
+                refresh_plot(sw,tfname=action)
         
         if action=='Refresh':
             if (sw:=self.mdi.activeSubWindow()) is not None:
-                refresh_plot(sw.plt)
+                refresh_plot(sw)
 
         if action=='History':
             plt=self.mdi.activeSubWindow().plt
