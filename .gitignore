@@ -10,5 +10,8 @@ acct.py
 !Experts/
 !Scripts/
 !assets/
+!data/
+!symbols/
+!MODEL_H1.csv
 
 test*

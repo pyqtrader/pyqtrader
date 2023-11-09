@@ -15,6 +15,7 @@ import time
 import six
 from abc import ABCMeta, abstractmethod
 
+import charttools as chtl, charttools
 import cfg
 
 # import data.acct as acct
@@ -1226,7 +1227,8 @@ def output(_from,_to,gran, instr):
         #main request:
         symb=instr.replace('_','')
         tf=oa_dict[gran]['tf']
-        filename="{}{}_{}.csv".format(cfg.DATA_SYMBOLS_DIR,symb, tf)
+        filename=chtl.symbol_to_filename(symb,tf,True)
+        # "{}{}_{}.csv".format(cfg.DATA_SYMBOLS_DIR,symb, tf)
         with open(filename, "w") as f:  
             for r in InstrumentsCandlesFactory(instrument=instr, params=params):
                 # print("REQUEST: {} {} {}".format(r, r.__class__.__name__, r.params))

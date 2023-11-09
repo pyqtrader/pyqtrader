@@ -18,7 +18,7 @@ import styles
 
 import overrides as ovrd, overrides
 
-from _debugger import _print,_printcallers,_exinfo,_c,_pc,_p
+from _debugger import *
 
 APW=drws.AltPlotWidget
 
@@ -825,7 +825,10 @@ class MDIWindow(QtWidgets.QMainWindow):
         
         return item
 
-    def range_setter(self,plt,item,XLast,xcount=cfg.DX_COUNT, xshift=cfg.DX_SHIFT,tf=cfg.D_TIMEFRAME,yzoom=cfg.DY_ZOOM):
+    def range_setter(self,plt,item,last_tick=None,xcount=cfg.DX_COUNT, 
+            xshift=cfg.DX_SHIFT,yzoom=cfg.DY_ZOOM):
+        tf=item.timeframe
+        XLast=item.last_tick if last_tick is None else last_tick
         plt.setXRange(XLast-xcount*tf,XLast+xshift*tf,padding=0)
         xl= int (XLast//tf)
         ymax=item.ymax(xl-xcount,xl)
@@ -891,7 +894,7 @@ class MDIWindow(QtWidgets.QMainWindow):
                             xl=new_cbl_item.ticks[x]
                             break
     
-                self.range_setter(plt,new_cbl_item,xl,xc,xs,new_tf,yzoom=yz)
+                self.range_setter(plt,new_cbl_item,xl,xc,xs,yzoom=yz)
                 
             except Exception:
                 pass
@@ -937,8 +940,23 @@ class MDIWindow(QtWidgets.QMainWindow):
             subw=AltSubWindow(profiles=[self.profiles[0]])
             plt = drws.AltPlotWidget(mwindow=self,subwindow=subw,
                 chartprops=self.props['chartprops'])
-            item=self.cbl_plotter(plt)
-            self.range_setter(plt,item, item.last_tick)
+            
+            item=None
+            try:
+                item=self.cbl_plotter(plt)
+            except FileNotFoundError as e:
+                for file in os.listdir(cfg.DATA_SYMBOLS_DIR):
+                    fl=chtl.filename_to_symbol(file)
+                    if fl is not None:
+                        item=self.cbl_plotter(plt,symbol=fl[0],tf=fl[1])
+                        break
+            
+            if item is None:
+                txt="No timeseries data available.\nYou need to login or load data manually."
+                uitools.simple_message_box(text=txt)
+                return
+            
+            self.range_setter(plt,item)
             subw.set_plot(plt)
             subw.plt=plt
             self.mdi.addSubWindow(subw)

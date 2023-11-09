@@ -8,6 +8,7 @@ from importlib.machinery import SourceFileLoader
 # import data.acct as acct
 import ohist
 import cfg
+import charttools as chtl, charttools
 
 from _debugger import _p,_pc,_printcallers,_exinfo,_ptime,_print
 
@@ -109,22 +110,23 @@ class Fetcher(QtCore.QObject):
     def fetch_data(self,session=None, record=False,symbol=cfg.D_SYMBOL, fromdt=None, todt=None, 
                     count=cfg.D_BARCOUNT,timeframe=cfg.D_TIMEFRAME, indexcut=0):
         
+        #--------- breakpoint for the offline mode or short symbol names:
+        if self.offline_mode or len(symbol)<6:
+            return {'data': None,'complete': True}
+        ############
+        
         instrument=symbol[:-3]+'_'+symbol[-3:]
         datalist=None
         granularity=tf_to_grn(timeframe)
         
         saved_df=None
         if record==True:
-            datasource=cfg.DATA_SYMBOLS_DIR+symbol+'_'+oa_dict[granularity]['tf']+'.csv'
+            datasource=chtl.symbol_to_filename(symbol,oa_dict[granularity]['tf'], fullpath=True)
+            # cfg.DATA_SYMBOLS_DIR+symbol+'_'+oa_dict[granularity]['tf']+'.csv'
             if os.path.isfile(datasource) and os.stat(datasource).st_size!=0:
                 saved_df=pd.read_csv(datasource)
                 indexcut=int(saved_df.iloc[-1].iloc[0]+1)
                 fromdt=saved_df.iloc[-1].iloc[1]+timeframe
-
-        #--------- breakpoint for the offline mode:
-        if self.offline_mode:
-            return {'data': datalist,'complete': True}
-        ############
 
         if fromdt is None:
             params = dict(count=count,granularity = granularity,smooth=OA_SMOOTH, price=OA_PRICE)

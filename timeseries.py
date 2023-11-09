@@ -7,8 +7,9 @@ import os, csv, time, requests
 import cfg
 import overrides as ovrd, overrides
 import fetcher as ftch, fetcher
+import charttools as chtl, charttools
 
-from _debugger import _print,_p,_pc,_printcallers,_c,_exinfo,_ptime
+from _debugger import *
 
 class Timeseries:
     def __init__(self,session=None,fetch=None,symbol=cfg.D_SYMBOL,timeframe=cfg.D_TIMEFRAME,count=cfg.D_BARCOUNT):
@@ -27,7 +28,8 @@ class Timeseries:
             if cfg.TIMEFRAMES[key]==self.tf:
                 self.tf_label=key
         
-        self.datasource=cfg.DATA_SYMBOLS_DIR+self.symbol+'_'+self.tf_label+'.csv'
+        self.datasource=chtl.symbol_to_filename(self.symbol,self.tf_label,True)
+        # cfg.DATA_SYMBOLS_DIR+self.symbol+'_'+self.tf_label+'.csv'
         self.data = []
 
         self.fetch=ftch.Fetcher() if fetch is None else fetch

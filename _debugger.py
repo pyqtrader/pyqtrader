@@ -2,6 +2,9 @@
 #ensure that _debugger module does not take more than one line as 
 #otherwise cpython compilation should fail
 
+__all__=['_print','_printcallers','_exinfo','_c','_pc',
+         '_p','_pp','_fts',"_ptime","comparestr"]
+
 import inspect
 import sys
 import time, datetime

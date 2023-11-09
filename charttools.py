@@ -1,13 +1,14 @@
 import PySide6
+import sys,inspect
 from pyqtgraph import Point
 import datetime
 import numpy as np
+
 import overrides as ovrd,overrides
 import cfg
+from uitools import simple_message_box
 
-import sys,inspect
-
-from _debugger import _exinfo,_print,_printcallers,_p,_pc,_c
+from _debugger import _exinfo,_print,_printcallers,_p,_pc,_c,_pp
    
 def zero1P():
     return [Point(0.0,0.0)]
@@ -178,7 +179,7 @@ def pgclr_to_hex(clr):
 
 from PySide6.QtWidgets import QMessageBox
 from drawings import CrossHair,PriceLine
-from uitools import simple_message_box
+
 def set_chart(plt,symbol=None,timeframe=None):
     old_item=plt.chartitem
     old_lc_item=plt.lc_item
@@ -196,8 +197,7 @@ def set_chart(plt,symbol=None,timeframe=None):
             pass
         new_item=plt.mwindow.cbl_plotter(plt,symbol=symb,ct=old_item.charttype,
             tf=timef)
-        plt.mwindow.range_setter(plt,new_item,new_item.last_tick,xcount=cnt,
-            xshift=shf,tf=timef)
+        plt.mwindow.range_setter(plt,new_item,xcount=cnt,xshift=shf)
         plt.removeItem(old_item)
         del old_item
         plt.chartitem=new_item
@@ -233,3 +233,31 @@ def string_to_html(text_color='black'):
             return output_text
         return wrapper
     return decorator
+
+#can except both timeframes and timeframe labels
+def symbol_to_filename(s=cfg.D_SYMBOL,tf=cfg.D_TIMEFRAME, fullpath=False):
+    if tf not in list(cfg.TIMEFRAMES.keys()):
+        try:
+            filename=f'{s}_{cfg.tf_to_label(tf)}.csv'
+        except Exception:
+            simple_message_box(text=f"Unknown timeframe: {tf}")
+            return
+    else:
+        filename=f'{s}_{tf}.csv'
+    
+    if fullpath:
+        filename=cfg.DATA_SYMBOLS_DIR+filename
+    
+    return filename
+
+def filename_to_symbol(filename):
+    if "_" not in filename:
+        return None
+    else:
+        parts=filename.split('_')
+        symbol=parts[0]
+        timeframe_label=parts[1].split('.')[0]
+        if timeframe_label not in list(cfg.TIMEFRAMES.keys()):
+            return None
+    
+    return symbol, cfg.TIMEFRAMES[timeframe_label]
