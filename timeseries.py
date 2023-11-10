@@ -42,8 +42,9 @@ class Timeseries:
                 reader = csv.reader(csvfile, quoting=csv.QUOTE_NONNUMERIC) # change contents to floats
                 self.data=list(reader)
         
-        def fill_datasource():
-            self.fetch.fetch_data(session=ses,record=True,symbol=self.symbol,timeframe=self.tf,count=self.count)
+        def fill_datasource(rm='a'):
+            self.fetch.fetch_data(session=ses,record=True, record_mode=rm, symbol=self.symbol,
+                timeframe=self.tf, count=self.count)
             read_datasource()
 
         if not os.path.isfile(self.datasource) or os.stat(self.datasource).st_size==0:
@@ -52,9 +53,7 @@ class Timeseries:
             read_datasource()
             lc_time=self.data[-1][1]
             if (time.time()-lc_time)//self.tf>self.count:
-                with open(self.datasource,'w') as f:
-                    f.truncate()
-                fill_datasource()                
+                fill_datasource(rm='w')                
         #----------------------------------------------------------------
 
         self.ticks=[] #datetimed indecies

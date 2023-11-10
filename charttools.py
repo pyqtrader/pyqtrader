@@ -212,8 +212,8 @@ def set_chart(plt,symbol=None,timeframe=None):
             plt.priceline=PriceLine(plt)
         plt.sigTimeseriesChanged.emit(new_item.timeseries)
         plt.vb.sigResized.emit(plt.vb) #workaround to ensure propogation of AltDateAxisItem data
-    except Exception:
-        simple_message_box(text='Invalid symbol',icon=QMessageBox.Warning)
+    except Exception as e:
+        simple_message_box(text=f'Invalid symbol: {e}',icon=QMessageBox.Warning)
         #print('Invalid symbol')
 
 def is_linux():

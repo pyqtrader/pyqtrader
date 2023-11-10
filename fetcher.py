@@ -107,8 +107,8 @@ class Fetcher(QtCore.QObject):
         self.connected= not self.connected
         self.sigConnectionStatusChanged.emit(self.connected)
 
-    def fetch_data(self,session=None, record=False,symbol=cfg.D_SYMBOL, fromdt=None, todt=None, 
-                    count=cfg.D_BARCOUNT,timeframe=cfg.D_TIMEFRAME, indexcut=0):
+    def fetch_data(self,session=None, record=False, record_mode='a',symbol=cfg.D_SYMBOL, 
+            fromdt=None, todt=None, count=cfg.D_BARCOUNT,timeframe=cfg.D_TIMEFRAME, indexcut=0):
         
         #--------- breakpoint for the offline mode or short symbol names:
         if self.offline_mode or len(symbol)<6:
@@ -211,7 +211,7 @@ class Fetcher(QtCore.QObject):
                 if lc_complete==False:
                     our_data.pop()        
                 cdf=dfreader(our_data)
-                cdf.to_csv(datasource, mode='a',header=False)
+                cdf.to_csv(datasource, mode=record_mode,header=False)
             
             datalist=candles_df.reset_index().values.tolist()
             for i,row in enumerate(datalist):
