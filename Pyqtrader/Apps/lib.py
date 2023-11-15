@@ -1,3 +1,4 @@
+from charttools import ListToDataframe
 
 SolidLine='____'
 DashLine='_ _ _'
@@ -101,3 +102,15 @@ def calc_bands(ins,period=20,multi=2):
         up.append(val+multi*dev)
         down.append(val-multi*dev)
     return mas,up,down
+
+# Puts the item's timeseries into a dataframe and updates the dataframe
+# when refresh() is called.  In general, refresh() should be called 
+# as the first instruction within PQcomputef() or PQexecutef().
+# The dataframe itself can be called as self.df
+class ItemDF(ListToDataframe):
+    def __init__(self, item,**kwargs) -> None:
+        super().__init__(item.series.data,**kwargs)
+        self.item=item
+    
+    def refresh(self):
+        return super().refresh(self.item.series.data)

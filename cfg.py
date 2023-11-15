@@ -104,7 +104,7 @@ ACCT_DETAILS="API_KEY=''\nACCOUNT_ID=''\nOANDA_URL=''\n"
 CORE_ICON=f'{ASSETS_DIR}m-512w_bb.png'
 
 USERFILESLIST=(ACCT_FILE,'__init__.py','lib.py','MovingAverageCross.py',
-    'ExponentialMovingAverage.py','Fractals.py','MACD.py','SimpleMovingAverage.py',
+    'ExponentialMovingAverage.py','Fractals.py','MACD.py','RSI.py','SimpleMovingAverage.py',
     'Stochastic.py','PreviousHighLow.py','Ticker.py','Scroller.py')
 
 HANDLE_SIZE=7

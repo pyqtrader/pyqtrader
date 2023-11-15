@@ -3,6 +3,7 @@ import sys,inspect
 from pyqtgraph import Point
 import datetime
 import numpy as np
+import pandas as pd
 
 import overrides as ovrd,overrides
 import cfg
@@ -261,3 +262,18 @@ def filename_to_symbol(filename):
             return None
     
     return symbol, cfg.TIMEFRAMES[timeframe_label]
+
+class ListToDataframe:
+    def __init__(self,datalist,columns=('i','t','o','h','l','c')) -> None:
+        self.columns=columns
+        self.df=pd.DataFrame(datalist,columns=self.columns)
+    
+    #Update the dataframe at server ticks
+    def refresh(self,datalist):
+        if len(self.df) == len(datalist):
+            self.df.iloc[-2:] = datalist[-2:]
+        elif len(datalist) > len(self.df):
+            self.df.iloc[-1] = datalist[len(self.df) - 1]
+            self.df = pd.concat([self.df, pd.DataFrame(datalist[len(self.df):], columns=self.df.columns)], ignore_index=True)
+        else:
+             self.df=pd.DataFrame(datalist,columns=self.columns)
