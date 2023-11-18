@@ -28,6 +28,8 @@ def invoker(mdi,fname,fpath,shortcut=None):
         appitem=apiTextStudy(aw.plt,fname=fname,fpath=fpath)
     elif app.PQitemtype=='HorizontalLineIndicator':
         appitem=apiHorLine(aw.plt,fname=fname,fpath=fpath)
+    elif app.PQitemtype=="VerticalLineIndicator":
+        appitem=apiVerLine(aw.plt,fname=fname,fpath=fpath)
     elif app.PQitemtype=='Script':
         appitem=apiScript(aw.plt,fname=fname, fpath=fpath,shortcut=shortcut)
     elif app.PQitemtype=='Expert':
@@ -596,5 +598,28 @@ _apiHLItem=api_study_factory(_HorLineItem)
 _apiHL=api_noncurve_study_factory(_apiHLItem)
 
 class apiHorLine(_apiHL):
+    def __init__(self, plt, fname=None, fpath=None, ts=None, caller=None,**kwargs):
+        super().__init__(plt, fname, fpath, ts, selectable=False,caller=caller,**kwargs)
+
+#################################
+class _VerLineItem(_apiItem,drawings.DrawVerLine):
+    def __init__(self, plt, values=None,dialog=None,width=None,color=None,style=None,
+        selectable=True,persistent=True,caller=None,**kwargs):
+        super().__init__(plt, dialog=dialog,caller=caller)
+        penprops=dict(width=width,color=color,style=style)
+        self.set_persistent(persistent)
+        self.set_selectable(selectable)
+        for key,item in penprops.items():
+            if item is not None:
+                setattr(self,key,item)
+                self.set_props(self.props)
+        self.set_selected(False)
+        if values is not None:
+            self.set_data(values)
+
+_apiVLItem=api_study_factory(_VerLineItem)
+_apiVL=api_noncurve_study_factory(_apiVLItem)
+
+class apiVerLine(_apiVL):
     def __init__(self, plt, fname=None, fpath=None, ts=None, caller=None,**kwargs):
         super().__init__(plt, fname, fpath, ts, selectable=False,caller=caller,**kwargs)

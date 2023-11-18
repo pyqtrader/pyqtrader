@@ -850,10 +850,41 @@ class InfiniteTrendLine(AltInfiniteLine): #Subclass tailored to DrawTrendLine as
 
     def right_clicked(self,ev):
         return self.parent().right_clicked(ev)
+
+class DVLineDialog(uitools.DrawPropDialog):
+    initials=dict(uitools.DrawPropDialog.initials)
+    def __init__(self, *args, tseries=None,dtxval=0, exec_on=True,**kwargs):
+        super().__init__(*args, **kwargs)
+        self.setWindowTitle('Vertical Line')
+        self.tseries=tseries
+        self.dtx=dtxval
+        self.dtxs = datetime.datetime.fromtimestamp(self.dtx)
+        
+        label=QtWidgets.QLabel('Datetime: ')
+        self.vl=QtWidgets.QDateTimeEdit()
+        self.vl.setDateTime(self.dtxs)
+        self.vl.setDisplayFormat('dd.MM.yyyy hh:mm')
+        self.layout.addWidget(label,self.order,0)
+        self.layout.addWidget(self.vl,self.order,1)
+        self.vl.dateTimeChanged.connect(self.update_dt)
+        self.order+=1
+
+        if exec_on==True:
+            self.embedded_db()
+            self.exec()
+
+    def update_dt(self):
+        self.dtxs=self.vl.dateTime()
+        self.dtx=self.dtxs.toSecsSinceEpoch()
     
+    def update_item(self,**kwargs):
+        self.item.set_dt(self.dtx)
+        self.item.setState([chtl.times_to_ticks(self.tseries,self.dtx),0])
+        return super().update_item(**kwargs)
+
 class DrawVerLine(AltInfiniteLine):
-    def __init__(self,plt,pos=[0,0],**kwargs):
-        super().__init__(plt,pos,angle=90,dialog=DVLineDialog,**kwargs)
+    def __init__(self,plt,pos=[0,0],dialog=DVLineDialog,**kwargs):
+        super().__init__(plt,pos,angle=90,dialog=dialog,**kwargs)
         self.state=self.getState()
         self.dtx =chtl.ticks_to_times(self.timeseries,self.state[0])
         self.context_menu=self.create_menu(description='Vertical Line')
@@ -921,37 +952,6 @@ class DrawVerLine(AltInfiniteLine):
     
     def right_clicked(self,ev):
         super().right_clicked(ev,tseries=self.timeseries,dtxval=self.dtx)
-
-class DVLineDialog(uitools.DrawPropDialog):
-    initials=dict(uitools.DrawPropDialog.initials)
-    def __init__(self, *args, tseries=None,dtxval=0, exec_on=True,**kwargs):
-        super().__init__(*args, **kwargs)
-        self.setWindowTitle('Vertical Line')
-        self.tseries=tseries
-        self.dtx=dtxval
-        self.dtxs = datetime.datetime.fromtimestamp(self.dtx)
-        
-        label=QtWidgets.QLabel('Datetime: ')
-        self.vl=QtWidgets.QDateTimeEdit()
-        self.vl.setDateTime(self.dtxs)
-        self.vl.setDisplayFormat('dd.MM.yyyy hh:mm')
-        self.layout.addWidget(label,self.order,0)
-        self.layout.addWidget(self.vl,self.order,1)
-        self.vl.dateTimeChanged.connect(self.update_dt)
-        self.order+=1
-
-        if exec_on==True:
-            self.embedded_db()
-            self.exec()
-
-    def update_dt(self):
-        self.dtxs=self.vl.dateTime()
-        self.dtx=self.dtxs.toSecsSinceEpoch()
-    
-    def update_item(self,**kwargs):
-        self.item.set_dt(self.dtx)
-        self.item.setState([chtl.times_to_ticks(self.tseries,self.dtx),0])
-        return super().update_item(**kwargs)
 
 class DHLineDialog(DVLineDialog):
     initials=dict(DVLineDialog.initials)
