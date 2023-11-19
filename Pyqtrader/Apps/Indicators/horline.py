@@ -3,18 +3,12 @@ from pyqtgraph import QtGui
 
 PQitemtype='HorizontalLineIndicator'
 
-UPTRENDCOLOR='g'
-DOWNTRENDCOLOR='orange'
-TRENDWIDTH=2
-NONTRENDWIDTH=1
-TRENDSTYLE=lib.SolidLine
-NONTRENDSTYLE=lib.DotLine
+LINECOLOR='orange'
+LINEWIDTH=0.5
+LINESTYLE=lib.DotLine
 BARSBACK=2
 
-NT_PROPS=dict(width=NONTRENDWIDTH,style=NONTRENDSTYLE)
-T_PROPS=dict(width=TRENDWIDTH,style=TRENDSTYLE)
-
-PQkwords=dict(width=TRENDWIDTH) #an alternative is PQtline.set_properties(width=TRENDWITH) in PQinitf
+PQkwords=dict(color=LINECOLOR,width=LINEWIDTH,style=LINESTYLE) #an alternative is PQtline.set_properties(width=LINEWITH...) in PQinitf
 
 def PQinitf(PQhline):
     s=PQhline.series
