@@ -8,7 +8,7 @@ LINEWIDTH=0.5
 LINESTYLE=lib.DashDotDotLine
 BARSBACK=2
 
-PQkwords=dict(color=LINECOLOR,width=LINEWIDTH,style=LINESTYLE) #an alternative is PQtline.set_properties(width=TRENDWITH) in PQinitf
+PQkwords=dict(color=LINECOLOR,width=LINEWIDTH,style=LINESTYLE) #an alternative is PQtline.set_properties(width=LINEWIDTH...) in PQinitf
 
 def PQinitf(PQvline):
     s=PQvline.series

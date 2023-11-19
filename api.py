@@ -128,6 +128,13 @@ class apiBase:
             vals=chtl.zero2P() if values==(0,0) else values
             si=_TrendLineItem(self.plt,values=vals,selectable=False,persistent=False,**kwargs)
         
+        elif itype=='VerLine':
+            vals=0 if values==(0,0) else values
+            si=_VerLineItem(self.plt,values=vals,selectable=False,persistent=False,**kwargs)
+
+        elif itype=='HorLine':
+            si=_HorLineItem(self.plt,values=values,selectable=False,persistent=False,**kwargs)
+
         else:
             simple_message_box(text=itype+' - unknown type')
         
