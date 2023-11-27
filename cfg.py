@@ -117,7 +117,7 @@ DASHDOTLINE='_._.'
 DASHDOTDOTLINE='_.._'
 LINESTYLES={SOLIDLINE:QtCore.Qt.SolidLine,DASHLINE:QtCore.Qt.DashLine,
             DOTLINE:QtCore.Qt.DotLine,
-            DASHDOTDOTLINE:QtCore.Qt.DashDotLine, '_.._':QtCore.Qt.DashDotDotLine}
+            DASHDOTLINE:QtCore.Qt.DashDotLine, DASHDOTDOTLINE:QtCore.Qt.DashDotDotLine}
 D_STYLE=SOLIDLINE
 D_LEVELSTYLE=DOTLINE
 D_COLOR='#ffffff'
