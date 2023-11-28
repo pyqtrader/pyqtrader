@@ -90,13 +90,19 @@ class Fetcher(QtCore.QObject):
         return {'Authorization': f'Bearer {self.acct.API_KEY}'}
 
     def _acct(self):
+        
+        def create_acct_file():
+            with open(cfg.DATA_DIR+cfg.ACCT_FILE,'w') as f:
+                    f.write(cfg.ACCT_DETAILS)
+        
+        if not os.path.isfile(cfg.DATA_DIR+cfg.ACCT_FILE):
+            create_acct_file()    
         try:
             a=SourceFileLoader(cfg.ACCT_FILE,cfg.DATA_DIR+cfg.ACCT_FILE).load_module()
         except Exception:
             from uitools import simple_message_box
-            simple_message_box(text='Login data error: re-enter login data')
-            with open(cfg.DATA_DIR+cfg.ACCT_FILE,'w') as f:
-                f.write(cfg.ACCT_DETAILS)
+            simple_message_box(text='Login data error: (re)enter login data if using API')
+            create_acct_file()
             a=SourceFileLoader(cfg.ACCT_FILE,cfg.DATA_DIR+cfg.ACCT_FILE).load_module()
         return a
     

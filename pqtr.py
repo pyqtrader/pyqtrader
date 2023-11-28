@@ -1193,26 +1193,20 @@ class MDIWindow(QtWidgets.QMainWindow):
             self.mdi.setBackground(self.palet.base())
 
 def mainexec():
-    # from patcher import patcher
-    # patcher()
 
     import sys
-    from userfiles_packer import unpack
-    # splash_ok=True
-    # # try: import pyi_splash
-    # except ImportError: splash_ok=False
 
     cwd=os.getcwd()
     sys.path.append(cwd)
 
-    unpack()
+    for dir in cfg.DIRECTORIES:
+        os.makedirs(dir,exist_ok=True)
     app = pg.mkQApp() #QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setWindowIcon(QtGui.QIcon(f'{cfg.CORE_ICON}'))
     
     ft=ftch.Fetcher()
     mdi = MDIWindow(application=app,fetch=ft)
-    # if splash_ok:pyi_splash.close()
     mdi.show()
     app.exec()
 
