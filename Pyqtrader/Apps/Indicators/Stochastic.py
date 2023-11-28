@@ -21,7 +21,7 @@ PQkwords=dict(windowed=True,width=WIDTH,color=COLOR,freeze=FREEZE,
 
 def PQinitf(PQitem):
     yv_d=calc_sma(PQitem.yvalues,period=_D)
-    PQitem.create_subitem('Curve',yv_d)
+    PQitem.create_subitem('Curve',values=yv_d)
     PQitem.subitems[0].setPen(dict(width=WIDTH_D,color=COLOR_D))
 
 def PQcomputef(PQitem):

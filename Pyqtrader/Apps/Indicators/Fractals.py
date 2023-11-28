@@ -92,5 +92,5 @@ def PQcomputef(PQtext):
                 newsi=PQtext.create_subitem('Text')
                 mark(PQtext,newsi,i,False)
                 
-# def deinitf(PQtext):
+# def PQdeinitf(PQtext):
 #     PQtext.sigSeriesChanged.disconnect(PQupdatef)

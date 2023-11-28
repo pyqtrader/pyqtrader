@@ -105,13 +105,14 @@ class apiBase:
         else: 
             return self.uf(self)
 
-    def create_subitem(self,itype,values=(0,0),**kwargs):
+    def create_subitem(self,itype,*args,values=(0,0),**kwargs):
         if 'timeseries' not in kwargs or kwargs['timeseries'] is None:
             ts=self.timeseries
         else:
             ts=kwargs['timeseries']
         
-        if itype=='Curve':    
+        if itype=='Curve':
+            if values==(0,0): values=[0]    
             si=studies._CurveItem(ts,values)
         
         elif itype=='Bar':
@@ -136,7 +137,10 @@ class apiBase:
             si=_HorLineItem(self.plt,values=values,selectable=False,persistent=False,**kwargs)
 
         else:
-            simple_message_box(text=itype+' - unknown type')
+            try: 
+                si=itype(*args,**kwargs)
+            except Exception as e:
+                simple_message_box("UserApps", text=f'{itype} - unknown type, {e}')
         
         self.subitems.append(si)
         if hasattr(self,'dockplt'):self.dockplt.addItem(si)
@@ -487,8 +491,8 @@ def api_study_factory(base):
             if self.hover_on==True:
                 obj.setToolTip(self.html_ttip())
         
-        def create_subitem(self, itype, values=(0, 0), **kwargs):
-            si=super().create_subitem(itype, values, **kwargs)
+        def create_subitem(self, itype, *args, values=(0, 0), **kwargs):
+            si=super().create_subitem(itype, *args, values=values, **kwargs)
             si.setParent(self)
             return si
 
@@ -560,11 +564,22 @@ def api_noncurve_study_factory(base):
                 return self.fname
 
         def remove_act(self):
+            error=None
             self.plt.lc_thread.sigLastCandleUpdated.disconnect(self.replot)
             self.plt.lc_thread.sigInterimCandleUpdated.disconnect(self.replot)
             for si in self.subitems:
                 if hasattr(si,'removal'):
                     si.removal()
+                else:
+                    try:
+                        if hasattr(self,"dockplt"):
+                            self.dockplt.removeItem(si)
+                        else:
+                            self.plt.removeItem(si)
+                    except Exception as e:
+                        error=e
+            if error is not None:
+                simple_message_box("User Apps", text=f"Graphics object removal error: {error}")
             return super().removal()
 
     return _apiNonCurve
