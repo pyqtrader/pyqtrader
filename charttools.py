@@ -277,3 +277,6 @@ class ListToDataframe:
             self.df = pd.concat([self.df, pd.DataFrame(datalist[len(self.df):], columns=self.df.columns)], ignore_index=True)
         else:
              self.df=pd.DataFrame(datalist,columns=self.columns)
+
+def pipper(symbol="EURUSD"):
+    return 10**(precision(symbol)-1)

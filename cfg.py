@@ -105,7 +105,7 @@ CORE_ICON=f'{ASSETS_DIR}m-512w_bb.png'
 
 USERFILESLIST=(ACCT_FILE,'__init__.py','lib.py','MovingAverageCross.py',
     'ExponentialMovingAverage.py','Fractals.py','MACD.py','RSI.py','SimpleMovingAverage.py',
-    'Stochastic.py','horline.py','verline.py','PreviousHighLow.py','Ticker.py','Scroller.py')
+    'Stochastic.py','ruler.py','horline.py','verline.py','PreviousHighLow.py','Ticker.py','Scroller.py')
 
 HANDLE_SIZE=7
 VICINITY_DISTANCE=20 #vicinity distance eg. hover distance in pixels/not used after pg bug fix
