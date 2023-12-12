@@ -40,8 +40,8 @@ oa_dict={
     'M'  : {'tf': 'MN', 'cnt':int(20*cfg.PERIOD_Y1//cfg.PERIOD_MN)},
 }
 
-def history(tf,symbol):
-    a=histparams(tf,symbol)
+def history(tf,symbol, bars=0):
+    a=histparams(tf,symbol, bars=bars)
     if a is not None:
         try:
             filename=ohist.output(*a)
@@ -54,11 +54,13 @@ def history(tf,symbol):
     else:
         return False
 
-def histparams(tframe,symbol):
+def histparams(tframe,symbol, bars=0):
     instrument=symbol[:-3]+'_'+symbol[-3:]
     grn=tf_to_grn(tframe)
-    count=oa_dict[f'{grn}']['cnt']
+    count=oa_dict[f'{grn}']['cnt'] if bars==0 else bars+1
     tf=cfg.TIMEFRAMES[oa_dict[f'{grn}']['tf']]
+    if tf==cfg.PERIOD_W1:
+        tf=(7*tf)/5
     now=dtm.timestamp(dtm.utcnow())
     if count is not None:
         start=dtm.fromtimestamp(now-count*tf).strftime('%Y-%m-%dT%H:%M:%SZ')

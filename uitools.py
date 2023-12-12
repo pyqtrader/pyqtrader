@@ -2,6 +2,7 @@ import PySide6
 from PySide6 import QtWidgets,QtGui,QtCore
 import cfg
 import charttools as chtl, charttools
+import fetcher as ftch
 
 #debugging section
 from _debugger import _print, _printcallers,  _exinfo, _p, _pc,_c
@@ -1051,4 +1052,113 @@ class TreeSubWindow(QtWidgets.QMdiSubWindow):
         self.mdi.removeSubWindow(self)
         return super().closeEvent(closeEvent)
 
+class HistoryDialog(QtWidgets.QDialog):
+    def __init__(self, mwindow):
+        super().__init__()
+        self.mwindow=mwindow
+        self.title="History Download"
+        self.setWindowTitle("History Download")
+        pmap=QtWidgets.QStyle.StandardPixmap
 
+        # Number of bars spin box
+        self.num_bars_label = QtWidgets.QLabel("Number of Timeframe Periods (including off-market):")
+        self.num_bars_spinbox = QtWidgets.QSpinBox()
+        self.num_bars_spinbox.setMaximum(10000000)
+
+        # Ticker checkboxes
+        self.ticker_checkboxes = []
+        timeframes = cfg.TIMEFRAMES
+        for timeframe in timeframes:
+            checkbox = QtWidgets.QCheckBox(timeframe)
+            self.ticker_checkboxes.append(checkbox)
+
+        # Action buttons
+        self.all_button = QtWidgets.QPushButton("All")
+        self.reset_button = QtWidgets.QPushButton("Reset")
+        pixmapi = getattr(pmap,f'SP_DialogResetButton')
+        icon = self.style().standardIcon(pixmapi)
+        self.reset_button.setIcon(icon)
+        self.cancel_button = QtWidgets.QPushButton("Cancel")
+        pixmapi = getattr(pmap,f'SP_DialogCancelButton')
+        icon = self.style().standardIcon(pixmapi)
+        self.cancel_button.setIcon(icon)
+        self.ok_button = QtWidgets.QPushButton("OK")
+        pixmapi = getattr(pmap,f'SP_DialogOkButton')
+        icon = self.style().standardIcon(pixmapi)
+        self.ok_button.setIcon(icon)
+
+        # Connect button signals
+        self.all_button.clicked.connect(self.toggle_all_timeframes)
+        self.reset_button.clicked.connect(self.reset_dialog)
+        self.cancel_button.clicked.connect(self.close)
+        self.ok_button.clicked.connect(self.download_history)
+
+        # Dialog layout
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.num_bars_label)
+        layout.addWidget(self.num_bars_spinbox)
+
+        grid_layout = QtWidgets.QGridLayout()
+        for i, checkbox in enumerate(self.ticker_checkboxes):
+            grid_layout.addWidget(checkbox, i // 3, i % 3)
+        layout.addLayout(grid_layout)
+
+        button_layout = QtWidgets.QHBoxLayout()
+        button_layout.addWidget(self.all_button)
+        button_layout.addWidget(self.reset_button)
+        button_layout.addWidget(self.cancel_button)
+        button_layout.addWidget(self.ok_button)
+        layout.addLayout(button_layout)
+
+        self.setLayout(layout)
+        self.reset_dialog()
+
+        self.exec()
+
+    def _get_checked_timeframes(self):
+        checked_timeframes = []
+        for checkbox in self.ticker_checkboxes:
+            if checkbox.isChecked():
+                checked_timeframes.append(checkbox.text())
+        return checked_timeframes
+
+    def toggle_all_timeframes(self):
+        any_checked = any(checkbox.isChecked() for checkbox in self.ticker_checkboxes)
+        for checkbox in self.ticker_checkboxes:
+            checkbox.setChecked(not any_checked)
+
+    def reset_dialog(self):
+        self.num_bars_spinbox.setValue(0)
+        default_timeframes = ["M1", "M5", "M15","M30","H1","H4","D1","W1"]  # Default timeframes to be ticked
+        for checkbox in self.ticker_checkboxes:
+            checkbox.setChecked(checkbox.text() in default_timeframes)
+    
+    def download_history(self):
+        plt=self.mwindow.mdi.activeSubWindow().plt
+        symbol=plt.symbol
+        checked_timeframes=self._get_checked_timeframes()
+        num_bars=self.num_bars_spinbox.value()
+        
+        checked_timeframes={name: cfg.TIMEFRAMES[name] for name in checked_timeframes}
+        tflen=len(checked_timeframes)
+        if tflen<1:
+            simple_message_box(title=self.title,text="No timeframe selected")
+            self.close()
+        pbox=ProgressBox(name='History',text='Loading history',max=tflen-1)
+        for i,tf in enumerate(checked_timeframes.values()):
+            if tf!=cfg.PERIOD_MN:
+                hst=ftch.history(tf,symbol,bars=num_bars)
+                if hst is True:
+                    pbox.setValue(i)
+                    lbl=cfg.tf_to_label(tf)
+                    pbox.setLabelText(f'Loading history: {symbol},{lbl}')
+                elif hst is False:
+                    pass
+                else:
+                    pbox.close()
+                    simple_message_box(title=self.title,
+                        text=f'Loading error: check connection and try again: {hst}')
+                    break
+        self.mwindow.window_act('Refresh')
+        self.close()
+            

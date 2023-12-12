@@ -203,7 +203,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionStochastic.triggered.connect(lambda *args: click_action(stds.StochTabsDialog))
         #Tools
         self.ui.actionUser_Apps.triggered.connect(lambda *args: uitools.TreeSubWindow.__call__(self))
-        self.ui.actionHistory.triggered.connect(lambda *args: self.window_act('History'))
+        self.ui.actionHistory.triggered.connect(lambda *args: uitools.HistoryDialog.__call__(self))
         self.ui.actionSettings.triggered.connect(lambda *args: uitools.SettingsDialog.__call__(self))
         #Window
         self.ui.actionTile.triggered.connect(lambda *args: self.window_act("Tile"))
@@ -1092,28 +1092,6 @@ class MDIWindow(QtWidgets.QMainWindow):
         if action=='Refresh':
             if (sw:=self.mdi.activeSubWindow()) is not None:
                 refresh_plot(sw)
-
-        if action=='History':
-            plt=self.mdi.activeSubWindow().plt
-            symbol=plt.symbol
-            tflen=len(cfg.TIMEFRAMES)
-            pbox=uitools.ProgressBox(name='History',text='Loading history',max=tflen-1)
-            for i,tf in enumerate(cfg.TIMEFRAMES.values()):
-                if tf!=cfg.PERIOD_MN:
-                    hst=ftch.history(tf,symbol)
-                    if hst is True:
-                        pbox.setValue(i)
-                        lbl=cfg.tf_to_label(tf)
-                        pbox.setLabelText(f'Loading history: {symbol},{lbl}')
-                    elif hst is False:
-                       pass
-                    else:
-                        pbox.close()
-                        uitools.simple_message_box(title='History',
-                            text='Loading error: check connection and try again')
-            
-            refresh_plot(cfg.tf_to_label(plt.timeframe))
-        ###############################################
 
         if action=='Login':
             uitools.LoginForm()
