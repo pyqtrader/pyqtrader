@@ -250,6 +250,7 @@
    <addaction name="actionDrawArrow"/>
    <addaction name="actionDrawPolyline"/>
    <addaction name="actionDrawPolyArrow"/>
+   <addaction name="actionDrawRuler"/>
   </widget>
   <action name="actionMN">
    <property name="text">
@@ -865,6 +866,18 @@
    </property>
    <property name="text">
     <string>Offline</string>
+   </property>
+  </action>
+  <action name="actionDrawRuler">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/ruler.png</normaloff>Pyqtrader/.system/assets/ruler.png</iconset>
+   </property>
+   <property name="text">
+    <string>DrawRuler</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw Ruler</string>
    </property>
   </action>
  </widget>

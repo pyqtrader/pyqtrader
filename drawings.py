@@ -2643,3 +2643,32 @@ class NewThread(QtCore.QThread):
         # self.loop.exec()
         super().run()
 
+class DrawRuler(DrawTrendLine):
+    def __init__(self, plt, coords=chtl.zero2P(),**kwargs):
+        super().__init__(plt, coords,**kwargs)
+        super().set_props(dict(color='r', extension=cfg.RAYDIR['n']))
+        self.tag=pg.TextItem(text="Text",color='r',anchor=(0.5,1))
+        self.plt.addItem(self.tag)
+
+        self.sigRegionChanged.connect(self.ruler_tag)
+        self.plt.vb.sigStateChanged.connect(self.ruler_tag)
+        self.plt.vb.sigTransformChanged.connect(self.ruler_tag)
+
+    def ruler_tag(self):
+        state=self.getState()
+        pos=state['pos']
+        points=state['points']
+        delta=points[1]-points[0]
+        self.tag.setPos(pos+points[1])
+        bars=int(delta[0]//self.timeseries.timeframe)
+        pips=(delta[1])*chtl.pipper(self.timeseries.symbol)
+        self.tag.setText(f"Pips: {pips:.1f}\nBars: {str(bars)}")
+    
+    def set_props(self,props):
+        if 'color' in props:
+            self.tag.setColor(props['color'])
+        return super().set_props(props)
+    
+    def removal(self):
+        self.plt.removeItem(self.tag)
+        return super().removal()(self)

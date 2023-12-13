@@ -15,12 +15,11 @@ import studies as stds, studies
 import labelings as lbls,labelings
 import fetcher as ftch,fetcher
 import styles
+from drawings import AltPlotWidget as APW
 
 import overrides as ovrd, overrides
 
 from _debugger import *
-
-APW=drws.AltPlotWidget
 
 class AltSubWindow(QtWidgets.QMdiSubWindow):
     sigAltSubWindowClosing=QtCore.Signal()
@@ -260,7 +259,8 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionDrawPolyline.triggered.connect(lambda *args:click_action(APW.draw_act,drws.DrawPolyLine))
         self.ui.actionDrawArrow.triggered.connect(lambda *args: click_action(APW.draw_act,drws.DrawArrow))
         self.ui.actionDrawPolyArrow.triggered.connect(lambda *args: click_action(APW.draw_act,drws.DrawPolyArrow))
-
+        self.ui.actionDrawRuler.triggered.connect(lambda *args: click_action(APW.draw_act,drws.DrawRuler))
+        
         self.ui.actionEmpty_Profile_Bin.triggered.connect(self.empty_profile_bin)
 
     #Restore
