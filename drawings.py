@@ -2654,6 +2654,8 @@ class DrawRuler(DrawTrendLine):
         self.plt.vb.sigStateChanged.connect(self.ruler_tag)
         self.plt.vb.sigTransformChanged.connect(self.ruler_tag)
 
+        self.context_menu=self.create_menu(ray_on=False,description="Ruler")
+
     def ruler_tag(self):
         state=self.getState()
         pos=state['pos']
@@ -2671,4 +2673,4 @@ class DrawRuler(DrawTrendLine):
     
     def removal(self):
         self.plt.removeItem(self.tag)
-        return super().removal()(self)
+        return super().removal()

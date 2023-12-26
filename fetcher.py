@@ -46,7 +46,8 @@ def history(tf,symbol, bars=0):
         try:
             filename=ohist.output(*a)
             df=pd.read_csv(filename)
-            df.drop_duplicates(subset=None,inplace=False)
+            df.drop_duplicates(subset=df.columns[0],inplace=True)
+            df.reset_index(drop=True,inplace=True)
             df.to_csv(filename,index=True,header=False)
             return True
         except ValueError as e:
@@ -219,6 +220,9 @@ class Fetcher(QtCore.QObject):
                 if lc_complete==False:
                     our_data.pop()        
                 cdf=dfreader(our_data)
+                #Remove duplicate rows
+                cdf.drop_duplicates(subset=['time'],inplace=True)
+                cdf.reset_index(drop=True,inplace=True)
                 cdf.to_csv(datasource, mode=record_mode,header=False)
             
             datalist=candles_df.reset_index().values.tolist()
