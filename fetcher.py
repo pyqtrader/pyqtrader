@@ -207,10 +207,3 @@ class Fetcher(QtCore.QObject):
         else:
             a=self.fetch_data(session=session,symbol=symbol, count=1,timeframe=timeframe)
             return a
-
-if __name__ == '__main__':
-    fetch=Fetcher()
-    lc=fetch.fetch_lc()['data'].to_dict()
-    
-    for key in lc:
-        print(key,type(lc[key][0]))

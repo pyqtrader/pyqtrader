@@ -234,7 +234,3 @@ def PlotTimeseries(symbol,ct,tf=None,ts=None,session=None,fetch=None,
         item = CandleBarItem(ct,tseries,start,end,chartprops=chartprops)
 
     return item
-    
-if __name__=="__main__":
-    ts=Timeseries()
-    print(ts.ticks[-2:])
