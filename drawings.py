@@ -1,6 +1,7 @@
 import PySide6
 from PySide6 import QtWidgets,QtCore,QtGui
 import math, time, datetime
+import numpy as np
 import pyqtgraph as pg
 from pyqtgraph import Point
 from pyqtgraph.graphicsItems.TargetItem import TargetItem
@@ -330,7 +331,6 @@ class DrawItem(DrawProps): #ROI generic class
     def repaint_ray(self):
         pass
 
-
     # def read_state(self):
     #     pass
 
@@ -369,14 +369,9 @@ class DrawItem(DrawProps): #ROI generic class
             mapper=lambda x: self.mapFromDevice(x)
             mp0=mapper(Point(0,0))
             if yes and mp0 is not None:
-                values=list(reversed(self.timeseries.values))
+                df=self.timeseries.data
+                ticks=self.timeseries.ticks
 
-                class mag: #magnetized obj(bar or ohlc point) 'structure'
-                    def __init__(self,obj,dist) -> None:
-                        self.obj=obj
-                        self.dist=dist
-               
-                ax0=self.plt.getAxis('bottom').range[0]
                 state=self.getState()
                 pts=state['points']
                 
@@ -384,30 +379,19 @@ class DrawItem(DrawProps): #ROI generic class
                 vect=Point(abs(vect.x()),abs(vect.y()))
                 cnt=0
                 while cnt<min(hls,len(pts)): #fix pitchfork initial setup
-                    minx=mag(values[0],abs(values[0][0]-pts[cnt][0]))#initialize minimum x axis distance from the base point
-                    for val in values: #identify magnetized bar
-                        if val[0]>=ax0 or val[0]>=0:
-                            a=abs(val[0]-pts[cnt][0])
-                            if a<minx.dist:
-                                minx.obj=val
-                                minx.dist=a
-                        else:
-                            break        
-                        
-                    if minx.dist<vect.x():
-                        magbar=minx.obj #magnetized bar
-                        miny=mag(magbar[2],abs(magbar[2]-vect.y())) #initialize minimum y axis distance 
-                        if miny.dist>0:
-                            for price in magbar[2:]: #identify magnetized ohlc point
-                                b=abs(price-pts[cnt][1])
-                                if b<miny.dist:
-                                    miny.obj=price
-                                    miny.dist=b
-                            if miny.dist<vect.y() and miny.dist>0:
-                                state['points'][cnt]=Point(minx.obj[0],miny.obj)
-                                self.setState(state)
-                                self.xy=state['points']
-                                self.xy_ticks_to_times()
+                    diff=np.abs(ticks-pts[cnt][0])
+                    closest_index=np.argmin(diff)
+                    if diff[closest_index]<vect.x():
+                        magbar=df.iloc[closest_index] #magnetized bar
+                        prices=magbar.loc['o':'c'].to_numpy()
+                        diff=abs(prices-pts[cnt][1])
+                        closest_price=np.argmin(diff)
+                        if diff[closest_price]<vect.y():
+                            state['points'][cnt]=Point(ticks[closest_index],
+                                                       prices[closest_price])
+                            self.setState(state)
+                            self.xy=state['points']
+                            self.xy_ticks_to_times()
                     cnt+=1
     
     def removal(self):
@@ -705,7 +689,8 @@ class AltInfiniteLine(DrawProps,pg.InfiniteLine):
             pass
     
     def save_dt(self):
-        return self.dtx
+        # int() to ensure JSON serializability
+        return int(self.dtx)
     
     def set_dt(self,dtx):
         self.dtx=dtx
@@ -794,41 +779,25 @@ class AltInfiniteLine(DrawProps,pg.InfiniteLine):
             mapper=lambda x: self.mapFromDevice(x)
             mp0=mapper(Point(0,0))
             if yes and mp0 is not None:
-                values=list(reversed(self.timeseries.values))
+                df=self.timeseries.data
+                ticks=self.timeseries.ticks
 
-                class mag: #magnetized obj(bar or ohlc point) 'structure'
-                    def __init__(self,obj,dist) -> None:
-                        self.obj=obj
-                        self.dist=dist
-               
-                ax0=self.plt.getAxis('bottom').range[0]
                 pts=self.getState()
                 
                 vect=mapper(Point(cfg.MAGNET_DISTANCE,cfg.MAGNET_DISTANCE))-mp0
                 vect=Point(abs(vect.x()),abs(vect.y()))
-                minx=mag(values[0],abs(values[0][0]-pts[0]))#initialize minimum x axis distance from the base point
-                for val in values: #identify magnetized bar
-                    if val[0]>=ax0 or val[0]>=0:
-                        a=abs(val[0]-pts[0])
-                        if a<minx.dist:
-                            minx.obj=val
-                            minx.dist=a
-                    else:
-                        break        
-                    
-                if minx.dist<vect.x():
-                    magbar=minx.obj #magnetized bar
-                    miny=mag(magbar[2],abs(magbar[2]-vect.y())) #initialize minimum y axis distance 
-                    if miny.dist>0:
-                        for price in magbar[2:]: #identify magnetized ohlc point
-                            b=abs(price-pts[1])
-                            if b<miny.dist:
-                                miny.obj=price
-                                miny.dist=b
-                        if miny.dist<vect.y() and miny.dist>0:
-                            xy=Point(minx.obj[0],miny.obj)
-                            self.setState(xy)
-                            return xy
+                diff=np.abs(ticks-pts[0])#initialize minimum x axis distance from the base point
+                closest_index=np.argmin(diff)
+                                    
+                if diff[closest_index]<vect.x():
+                    magbar=df.iloc[closest_index] #magnetized bar
+                    prices=magbar.loc['o':'c'].to_numpy()
+                    diff=np.abs(prices-pts[1])
+                    closest_price=np.argmin(diff) 
+                    if diff[closest_price]<vect.y():
+                        xy=Point(ticks[closest_index],prices[closest_price])
+                        self.setState(xy)
+                        return xy
         return None #if xy is not returned, return None
 
     def removal(self):
@@ -1072,7 +1041,8 @@ class DrawHorLine(AltInfiniteLine):
     
     def save_dt(self):
         pos=self.getPos()
-        return [self.dtx,pos[1]]
+        # int() to ensure JSON serializability
+        return [int(self.dtx),pos[1]]
     
     def set_dt(self, dtxy):
         self.dtx=dtxy[0]
@@ -2141,6 +2111,38 @@ class DrawPitchfork(DrawItem,AltPolyLine):
         del self.pfork
         super().removal()
 
+class DrawRuler(DrawTrendLine):
+    def __init__(self, plt, coords=chtl.zero2P(),**kwargs):
+        super().__init__(plt, coords,**kwargs)
+        super().set_props(dict(color='r', extension=cfg.RAYDIR['n']))
+        self.tag=pg.TextItem(text="Text",color='r',anchor=(0.5,1))
+        self.plt.addItem(self.tag)
+
+        self.sigRegionChanged.connect(self.ruler_tag)
+        self.plt.vb.sigStateChanged.connect(self.ruler_tag)
+        self.plt.vb.sigTransformChanged.connect(self.ruler_tag)
+
+        self.context_menu=self.create_menu(ray_on=False,description="Ruler")
+
+    def ruler_tag(self):
+        state=self.getState()
+        pos=state['pos']
+        points=state['points']
+        delta=points[1]-points[0]
+        self.tag.setPos(pos+points[1])
+        bars=int(delta[0]//self.timeseries.timeframe)
+        pips=(delta[1])*chtl.to_pips(self.timeseries.symbol)
+        self.tag.setText(f"Pips: {pips:.1f}\nBars: {str(bars)}")
+    
+    def set_props(self,props):
+        if 'color' in props:
+            self.tag.setColor(props['color'])
+        return super().set_props(props)
+    
+    def removal(self):
+        self.plt.removeItem(self.tag)
+        return super().removal()
+
 class CrossHair:
     def __init__(self,plt):
         wd=cfg.CROSSHAIR_WIDTH
@@ -2349,11 +2351,10 @@ class AltPlotWidget(pg.PlotWidget):
         except Exception:
             pass
         del self.lc_thread
-        self.lc_thread=NewThread(self,symbol=ci.symbol,timeframe=ci.timeframe,timecut=ts.timecut,
-            indexcut=ts.indexcut)
+        self.lc_thread=NewThread(self,symbol=ci.symbol,timeframe=ci.timeframe)
         self.lc_thread.start()
         self.lc_thread.sigLastCandleUpdated.connect(self.redraw_lc)
-        self.lc_thread.sigInterimCandleUpdated.connect(self.append_inc)            
+        self.lc_thread.sigInterimCandlesUpdated.connect(self.append_inc)            
     
     def ts_change(self,ts):
         if self.chartitem.timeseries is not ts:
@@ -2520,19 +2521,18 @@ class AltPlotWidget(pg.PlotWidget):
         # self.vb.update()
     
     def redraw_lc(self): #update last_candle
-        if self.chartitem!=None:
+        if self.chartitem is not None and self.lc_thread.lc is not None:
             ts=self.chartitem.timeseries
-            ts.update_lc(self.lc_thread.lc)
+            ts.update_ts(self.lc_thread.lc)
             self.lc_item=self.redraw_chartitem(self.lc_item,start=-1)
 
-    def append_inc(self,inc):
-        if self.chartitem!=None and self.lc_thread.inc!=None:
-            # passed from NewThread's self.inc, [:-1] to ignore last candle 
-            # and leave for consideration interims only (typically a single candle)
-            # [1:] to remove index number and leave time and ohlc only:
-            for c in inc['data'][:-1]:
-                self.chartitem.timeseries.replace_candle(c[1:])
-                self.chartitem=self.redraw_chartitem(self.chartitem)
+    def append_inc(self):
+        if self.chartitem!=None and self.lc_thread.incs!=None:
+            # passed from NewThread's self.incs, [:-1] to ignore last candle 
+            # and leave for consideration interims only (typically a single candle):
+            interim_candles=self.lc_thread.incs['data'][:-1]
+            self.chartitem.timeseries.update_ts(dict(data=interim_candles,complete=None))
+            self.chartitem=self.redraw_chartitem(self.chartitem)
             
     def symb_change(self):
         symb=self.eline.text().strip().upper() #strip of spaces and capitalize
@@ -2580,45 +2580,59 @@ class AltPlotWidget(pg.PlotWidget):
 
 class NewThread(QtCore.QThread):
     sigLastCandleUpdated=QtCore.Signal()
-    sigInterimCandleUpdated=QtCore.Signal(object)
-    def __init__(self,plt,symbol=cfg.D_SYMBOL,timeframe=cfg.D_TIMEFRAME,
-            timecut=0,indexcut=0,*args,**kwargs) -> None:
+    sigInterimCandlesUpdated=QtCore.Signal()
+    def __init__(self,plt,symbol=cfg.D_SYMBOL,timeframe=cfg.D_TIMEFRAME,*args,**kwargs) -> None:
         super().__init__(*args,**kwargs)
         self.sb=symbol
         self.tf=timeframe
-        self.fromdt=timecut
-        self.tcc=indexcut
-        self.inc=None
+        self.incs=None
         self.plt=plt
         self.subwindow=self.plt.subwindow
         self.mwindow=self.plt.mwindow
         self.fetch=self.mwindow.fetch
         self.tmr=self.mwindow.props['timer']
         self.session=self.mwindow.session
-        self.lc=self.fetch.fetch_lc(self.session,self.sb,self.tf)
+        self.lc=self.get_lc()
         self.prev_lc=self.lc
         #to ensure no candle data loss on initiation:
         self.data_request()
     
+    def get_lc(self):
+        return self.fetch.fetch_lc(self.session,self.sb,self.tf)
+
+    def lc_has_changed(self):
+        # if both lc and previous lc are None, then return False
+        if self.lc is None and self.prev_lc is None:
+            return False
+        # if one of self.lc or self.prev_lc is None and the other is not, return True
+        elif not (self.lc and self.prev_lc):
+            return True
+        
+        # if both lc and previos lc are not None, continue:
+        if self.lc['complete']!=self.prev_lc['complete']:
+            return True
+        
+        if self.lc['data'].equals(self.prev_lc['data']):
+            return False
+        else:
+            return True
+
     def data_request(self):
-        self.lc=self.fetch.fetch_lc(self.session,self.sb,self.tf)
-        if self.lc!=self.prev_lc:
-            if self.lc is not None and self.lc['data'] is not None:
-                lct=self.lc['data'][-1][1]
-                if self.prev_lc is None or self.prev_lc['data'] is None:
+        self.lc=self.get_lc()
+        if self.lc_has_changed():
+            if self.lc is not None:
+                lct=self.lc['data'].t.iloc[-1]
+                if self.prev_lc is None:
                     self.prev_lc=self.lc
                 else:
-                    prev_lct=self.prev_lc['data'][-1][1]
+                    prev_lct=self.prev_lc['data'].t.iloc[-1]
                     if lct>prev_lct:
                         self.prev_lc=self.lc                
                         todt=time.time()
-                        self.inc=self.fetch.fetch_data(session=self.session, symbol=self.sb,fromdt=self.fromdt,todt=todt,
-                                timeframe=self.tf,indexcut=self.tcc)
-                        if self.inc!=None:
-                            prev_fromdt=self.fromdt
-                            self.fromdt=self.inc['data'][-1][1]
-                            self.tcc+=(self.fromdt-prev_fromdt)//self.tf
-                            self.sigInterimCandleUpdated.emit(self.inc)
+                        self.incs=self.fetch.fetch_data(session=self.session, symbol=self.sb,fromdt=prev_lct,todt=todt,
+                                timeframe=self.tf)
+                        if self.incs!=None:
+                            self.sigInterimCandlesUpdated.emit()
             self.sigLastCandleUpdated.emit()
 
     #override
@@ -2643,34 +2657,3 @@ class NewThread(QtCore.QThread):
         # self.loop.exec()
         super().run()
 
-class DrawRuler(DrawTrendLine):
-    def __init__(self, plt, coords=chtl.zero2P(),**kwargs):
-        super().__init__(plt, coords,**kwargs)
-        super().set_props(dict(color='r', extension=cfg.RAYDIR['n']))
-        self.tag=pg.TextItem(text="Text",color='r',anchor=(0.5,1))
-        self.plt.addItem(self.tag)
-
-        self.sigRegionChanged.connect(self.ruler_tag)
-        self.plt.vb.sigStateChanged.connect(self.ruler_tag)
-        self.plt.vb.sigTransformChanged.connect(self.ruler_tag)
-
-        self.context_menu=self.create_menu(ray_on=False,description="Ruler")
-
-    def ruler_tag(self):
-        state=self.getState()
-        pos=state['pos']
-        points=state['points']
-        delta=points[1]-points[0]
-        self.tag.setPos(pos+points[1])
-        bars=int(delta[0]//self.timeseries.timeframe)
-        pips=(delta[1])*chtl.pipper(self.timeseries.symbol)
-        self.tag.setText(f"Pips: {pips:.1f}\nBars: {str(bars)}")
-    
-    def set_props(self,props):
-        if 'color' in props:
-            self.tag.setColor(props['color'])
-        return super().set_props(props)
-    
-    def removal(self):
-        self.plt.removeItem(self.tag)
-        return super().removal()

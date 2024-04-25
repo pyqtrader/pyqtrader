@@ -1,5 +1,3 @@
-from Pyqtrader.Apps.lib import *
-
 PQitemtype='CurveIndicator'
 
 PERIODFAST=12
@@ -28,6 +26,8 @@ def PQinitf(PQitem):
     dkvb.setRange(rect=rct,padding=0) 
     PQitem.set_label()
 
+    PQitem.sigSeriesChanged.connect(update_hist_width)
+
 def calc_hist(PQitem):
     st=len(PQitem.values[1])-len(PQitem.subitems[0].values[0])
     v=PQitem.values[1][st:]
@@ -40,6 +40,10 @@ def calc_hist(PQitem):
     s=PQitem.subitems[0].values[1][-len(v):]
     hist=[a_i - b_i for a_i, b_i in zip(v, s)]
     return hist
+
+def update_hist_width(PQitem):
+        PQitem.subitems[1].opts['width']=WIDTHHIST*PQitem.ts.tf
+        PQitem.subitems[1].setOpts()
 
 def PQcomputef(PQitem):
     def cached_ma(ins,period,v0=None):
@@ -76,7 +80,6 @@ def PQreplot(PQitem):
     st=None
     if PQitem.cache_event and PQitem.cache0['sgn_v0'] is not None:
         st=-3-PQitem.ts_diff
-    PQitem.mreplot()
     if len(PQitem.subitems)>0:
         ins=PQitem.values[1][st:]
         yvals_signal=calc_ema(ins,PERIODSIGNAL,v0=PQitem.cache0['sgn_v0'])
@@ -105,3 +108,25 @@ def PQtooltip(PQitem):
     v_d=si.yvalues[index1]
     return '{}({},{},{})\n{}\nMACD:{:.{pr}f}\nSignal:{:.{pr}f}'.format(PQitem.fname,
         PERIODFAST,PERIODSLOW,PERIODSIGNAL,xtext,ytext,v_d,pr=precision)
+
+#Exponential moving average calculation
+def calc_ema(ins,period,v0=None):
+    yres=[]
+    def sma(i):
+        return sum(ins[i-period+1:i+1])/period
+    k=2/(period+1)
+    for ind,val in enumerate(ins):
+        if v0 is None:
+            if ind>=period-1:
+                if ind==period-1:
+                    e=sma(ind)
+                else:
+                    e=val*k+e*(1-k)
+                yres.append(e)
+        else: 
+            if ind==0: #caching
+                e=v0
+            else:
+                e=val*k+e*(1-k)
+            yres.append(e)
+    return yres

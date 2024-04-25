@@ -2,7 +2,8 @@ import PySide6
 from PySide6.QtWidgets import QMainWindow,QComboBox,QSpinBox,QDoubleSpinBox,QLabel,QMenu
 from PySide6 import QtCore
 from pyqtgraph import PlotCurveItem,BarGraphItem,TextItem,InfiniteLine
-from numpy import sqrt
+import numpy as np
+import pandas_ta as ta
 
 import cfg
 import charttools as chtl, charttools
@@ -284,10 +285,14 @@ class ATRDialog(uitools.PropDialog):
 
 class _ChartItem: #study abstract class
     def __init__(self, tseries, yvals, shift=0,caching=True,caller=None):
-        self.values=matcher(tseries,yvals,shift=shift)
-        self._length=len(tseries.times)
+        self.values=self.matcher(tseries,yvals,shift=shift)
+        self._length=len(tseries.data)
         self.caching=caching
         self.caller=caller
+
+    @property
+    def xvalues(self):
+        return self.values[0]
 
     @property
     def yvalues(self):
@@ -297,17 +302,22 @@ class _ChartItem: #study abstract class
         return super(_ChartItem,self).setData(*args,**kwargs)
 
     def set_data(self, tseries, yvals, shift=0):
+        ticks=tseries.ticks
+        if type(yvals)==list:
+            yvals = np.array(yvals)
+        
         def initial():
-            self.values=matcher(tseries,yvals,shift=shift)
+            self.values=self.matcher(tseries,yvals,shift=shift)
             self.setData(*self.values)
-            self._length=len(tseries.times)
+            self._length=len(ticks)
+        
         if not self.caching:
             initial()
         else:
             if self._length is None or tseries is None or yvals is None:
                 initial()
             else:
-                delta=len(tseries.times)-self._length
+                delta=len(ticks)-self._length
                 ly=len(yvals)
                 if delta<0:
                     initial()
@@ -318,18 +328,41 @@ class _ChartItem: #study abstract class
                     except Exception: #to process X,Y mismatch and other exceptions
                         initial()
                 elif delta==1:
-                    self.values[0].append(tseries.ticks[-1])
-                    self.values[1].append(0)
+                    self.values[0]=np.append(self.values[0],ticks[-1])
+                    self.values[1]=np.append(self.values[1],0) # add empty value
                     self.values[1][-ly:]=yvals
                     try:
                         self.setData(*self.values)
                     except Exception: #to process X,Y mismatch and other exceptions
                         initial()
-                    self._length=len(tseries.times)#update length, in other cases it is updated within initials()
+                    self._length=len(ticks)#update length, in other cases it is updated within initials()
                 else: #delta>1 - re-initialise fully if more than 1 new candles have formed
                     initial()
         return self.values
     
+    def matcher(self,tseries,yvals, shift: int=0):
+        if tseries is None or yvals is None:
+            res=[None,None]
+        
+        else:
+            tslen=len(tseries.ticks)
+            vlen=len(yvals)
+            diff=tslen-vlen
+            ticks=tseries.ticks[diff:]
+            tf=tseries.timeframe
+            if shift>0:
+                # Shift to the right
+                ticks=ticks[shift:]
+                ticks = np.append(ticks[:-1], np.arange(ticks[-1], ticks[-1] + (shift+1)*tf, tf))
+            elif shift<0:
+                # Shift to the left
+                ticks=ticks[:shift]
+                ticks=np.append(np.arange(ticks[0]+shift*tf, ticks[0],tf),ticks)
+
+            res=[ticks,yvals]
+        
+        return res
+
     def update_subitem(self,values,tseries=None): #api update function
         ts=self.parent().timeseries if tseries is None else tseries
         return self.set_data(ts,values)
@@ -363,7 +396,7 @@ def study_item_factory(base):
         sigRightClicked=QtCore.Signal(object)
         def __init__(self,plt,windowed=False,funkvars=None,ts=None,shift=0,color=cfg.D_STUDYCOLOR, width=cfg.D_STUDYWIDTH,
                 ttname=None,dialog=None, precision=None,dockplt=None,levels=None,freeze=None,
-                freeze_range=(0,100),hover_on=True,caching=True,cache0=None,**kwargs):
+                freeze_range=(0,100),hover_on=True,caching=True,cache0: dict=None,**kwargs):
             self.is_persistent=True
             self.is_study=True
             self.windowed=windowed
@@ -383,7 +416,7 @@ def study_item_factory(base):
             self.funkvars=funkvars #function's keyword variables
             self.caching=caching
             self._length=None
-            self.cache0={} if cache0 is None else cache0 #dict for cache starting values
+            self.cache0=cache0 #dict for cache starting values
             yvals=self.computef()
 
             super().__init__(self.timeseries,yvals,shift=self.shift,**kwargs)
@@ -425,7 +458,7 @@ def study_item_factory(base):
             self.plt.sigTimeseriesChanged.connect(self.ts_change)
             self.sigRightClicked.connect(self.right_clicked)
             self.plt.lc_thread.sigLastCandleUpdated.connect(self.replot)
-            self.plt.lc_thread.sigInterimCandleUpdated.connect(self.replot)
+            self.plt.lc_thread.sigInterimCandlesUpdated.connect(self.replot)
 
         def mouseClickEvent(self, ev):
             self.mc_event=ev
@@ -450,10 +483,10 @@ def study_item_factory(base):
 
         @property
         def ts_diff(self): #difference of the length of timeseries compared to the previous server request
-            diff=len(self.timeseries.times)-(self._length if self._length is not None else 0)
+            diff=len(self.timeseries.data)-(self._length if self._length is not None else 0)
             return diff
 
-        def replot(self):
+        def replot(self) -> None:
             ts=self.plt.chartitem.timeseries
             if self.timeseries is not ts:
                 self.timeseries=ts
@@ -467,15 +500,16 @@ def study_item_factory(base):
             for ch in self.children():
                 if hasattr(ch,'_length'):
                     ch._length=None
-            for key in self.cache0: #flush starting values
-                self.cache0[key]=None
+            if self.cache0 is not None:
+                for key in self.cache0: #flush starting values
+                    self.cache0[key]=None
         
         def ts_change(self,ts):
             self.flush_cache()
             self.timeseries=ts
             self.replot()
             self.plt.lc_thread.sigLastCandleUpdated.connect(self.replot)
-            self.plt.lc_thread.sigInterimCandleUpdated.connect(self.replot)
+            self.plt.lc_thread.sigInterimCandlesUpdated.connect(self.replot)
 
         def save_props(self):
             pen=self.opts['pen']
@@ -626,7 +660,7 @@ def study_item_factory(base):
         def removal(self):
             self.plt.sigChartPropsChanged.disconnect(self.update_label)
             self.plt.lc_thread.sigLastCandleUpdated.disconnect(self.replot)
-            self.plt.lc_thread.sigInterimCandleUpdated.disconnect(self.replot)
+            self.plt.lc_thread.sigInterimCandlesUpdated.disconnect(self.replot)
             self.plt.sigTimeseriesChanged.disconnect(self.ts_change)
             self.sigRightClicked.disconnect(self.right_clicked)
             self.dockplt.removeItem(self)
@@ -638,19 +672,42 @@ StudyCurveItem=study_item_factory(_CurveItem)
 class MAItem(StudyCurveItem):
     def __init__(self, plt,period=cfg.D_STUDYPERIOD,mode=cfg.D_STUDYMODE,method=cfg.D_STUDYMETHOD,shift=0,**kwargs):
         fvrs=dict(period=period,mode=mode,method=method) #needed to streamline JSON storing
-        super().__init__(plt,funkvars=fvrs,shift=shift,ttname=method[0].upper()+'MA',dialog=MADialog,
-        cache0=dict(v0=None),**kwargs)
-
-    @property
-    def v0(self):
-        return self.cache0['v0']
-    
-    @v0.setter
-    def v0(self,x):
-        self.cache0['v0']=x
+        super().__init__(plt,funkvars=fvrs,shift=shift,ttname=method[0].upper()+'MA',dialog=MADialog,**kwargs)
+        self.v0=None
     
     def computef(self,ts=None):
-        return ma_computef(self,ts)
+        df=self.timeseries.data if ts is None else ts.data
+        fv=self.funkvars
+        period=fv['period']
+        method=fv['method']
+        mode=fv['mode']
+       
+        if method=='Simple':
+            self.ttname='SMA'
+            ins=df[mode[0].lower()][-2-period if self.cache_event else None:]
+            yvals=ta.sma(ins,length=period).dropna().to_numpy()
+        elif method=='Exponential':
+            self.ttname='EMA'
+            ins=df[mode[0].lower()]
+            
+            # Cache processing
+            if self.cache_event and self.v0 is not None:
+                ins=ins[-2-self.ts_diff-period:] # caching array
+
+                # Tricking ta.ema() into accepting the cached ema value (self.v0) as the
+                # starting value for the recalculated bars processing
+                ins=ins.copy() # ensures that the source data is not modified to avoid graphical artifacts
+                ins.iloc[:period]=self.v0
+
+                yvals=ta.ema(ins,length=period,sma=True).dropna().to_numpy()
+
+            # Non-cache processing
+            else:
+                yvals=ta.ema(ins,length=period).dropna().to_numpy()
+
+            self.v0=yvals[-3] # cached ema value
+        
+        return yvals
 
 class RSIItem(StudyCurveItem):
     def __init__(self, plt,period=cfg.D_RSIPERIOD,mode=cfg.D_STUDYMODE,**kwargs):
@@ -663,7 +720,7 @@ class RSIItem(StudyCurveItem):
         tseries=self.timeseries if ts is None else ts
         mode=self.funkvars['mode']
         period=self.funkvars['period']
-        values=study_inputs(tseries,mode=mode)
+        values=tseries.data[mode[0].lower()]
         yres = []
         up,down=0,0
         cutoff=period+1
@@ -696,7 +753,7 @@ class RSIItem(StudyCurveItem):
         for i,value in enumerate(values[:-1]):#main loop
             if i==len(values)-3:#caching: take the third latest candle
                 self.cache=dict(up=up,down=down,times=tseries.times[-3])
-            diff=values[i+1]-value
+            diff=values.iloc[i+1]-value
             up=(up*(period-1)+(diff if diff>0 else 0))/period
             down=(down*(period-1)+(-diff if diff<0 else 0))/period
             if down!=0:
@@ -711,37 +768,34 @@ class RSIItem(StudyCurveItem):
 class StochItem(StudyCurveItem):
     def __init__(self, plt,period=cfg.STOCH_K,period_slow=cfg.STOCH_SLOW,period_d=cfg.STOCH_D,
         width_d=cfg.STOCHWIDTH_D,color_d=cfg.STOCHCOLOR_D,**kwargs):
-        fvrs=dict(period=period,period_slow=period_slow)
+        fvrs=dict(period=period,period_slow=period_slow, period_d=period_d)
         self.period_d=period_d
         self.width_d=width_d
         self.color_d=color_d
-        self.dslow=None #to fix errors before dslow is initialised and not use 'try'/'except'
+
         super().__init__(plt,windowed=True,funkvars=fvrs,precision=4,
             ttname='Stoch', dialog=StochTabsDialog,**kwargs)
-        yvals_d=calc_ma(self.values[1],period=period_d)
-        self.dslow=_CurveItem(self.timeseries,yvals_d)
+        self.dslow=_CurveItem(self.timeseries,[])
         self.dslow.setParent(self)
         self.dockplt.addItem(self.dslow)
         self.dslow.setPen(dict(width=self.width_d,color=self.color_d))
         self.set_label()
     
     def computef(self,ts=None):
-        tseries=self.timeseries if ts is None else ts
-        period=self.funkvars['period']
-        period_slow=self.funkvars['period_slow']
-        highs=tseries.highs
-        lows=tseries.lows
-        closes=tseries.closes
-        y = []
-        lng=len(closes)
-        st=lng-2-period-period_slow-self.period_d if self.cache_event else period #caching processing
-        for i in range(st,lng):
-            highest=max(highs[i+1-period:i+1])
-            lowest=min(lows[i+1-period:i+1])
-            res=100*(closes[i]-lowest)/(highest-lowest) if highest-lowest!=0 else 50
-            y.append(res)
+        df=self.timeseries.data if ts is None else ts.data
+        period=(fv:=self.funkvars)['period']
+        period_slow=fv['period_slow']
+        period_d=fv['period_d']
+        
+        ins=df[-2-sum(fv.values()) if self.cache_event else None:]
 
-        return calc_ma(y,period=period_slow)
+        stoch=ta.stoch(ins.h,ins.l,ins.c,k=period,d=period_d,smooth_k=period_slow,mamode='sma')
+
+        yvals_d=stoch.iloc[:,1].dropna().to_numpy()
+        if hasattr(self, 'dslow'):
+            self.dslow.set_data(self.timeseries,yvals_d) 
+
+        return stoch.iloc[:,0].dropna().to_numpy()
     
     def save_props(self):
         a=super().save_props()
@@ -757,20 +811,12 @@ class StochItem(StudyCurveItem):
             self.color_d=state['color_d']
             self.dslow.setPen(dict(width=self.width_d,color=self.color_d))
         super().set_props(state,**kwargs)
-    
-    def replot(self):
-        st=-2-self.period_d if self.cache_event else None #preceds super.replot() to ensure that 
-                                            #self.cache_event is not reset on ts_change() or other event
-        super().replot()
-        yvals_d=calc_ma(self.values[1][st:],period=self.period_d)
-        if self.dslow is not None:
-            self.dslow.set_data(self.timeseries,yvals_d)        
         
     def ttip(self):
         index,xtext,pre=self.xttip()
-        ytext=self.values[1][index]
-        index1=index-(len(self.values[0])-len(self.dslow.values[0]))
-        v_d=self.dslow.values[1][index1]
+        ytext=self.yvalues[index]
+        index1=index-(len(self.xvalues)-len(self.dslow.xvalues))
+        v_d=self.dslow.yvalues[index1]
         return '{}({},{},{})\n{}\n%K:{:.{pr}f}\n%D:{:.{pr}f}'.format(self.ttname,self.funkvars['period'],
             self.funkvars['period_slow'],self.period_d,xtext,ytext,v_d,pr=self.precision)
 
@@ -810,7 +856,9 @@ class MACDItem(StudyCurveItem):
         self.histitem.setZValue(-1)
         self.dockplt.addItem(self.histitem)
         dkvb.setRange(rect=rct,padding=0) 
-    
+
+        self.plt.sigTimeseriesChanged.connect(self.update_hist_width)
+
     @property
     def v01(self):
         return self.cache0['v01']
@@ -899,11 +947,15 @@ class MACDItem(StudyCurveItem):
             self.histitem.setOpts()
         super().set_props(state,**kwargs)
     
+    def update_hist_width(self,ts):
+        self.histitem.opts['width']=self.width_hist*ts.tf
+        self.histitem.setOpts()
+
     def replot(self):
+        super().replot()
         st=None
         if self.cache_event and self.sgn_v0 is not None:
             st=-3-self.ts_diff
-        super().replot()
         if self.signalline is not None:
             ins=self.values[1][st:]
             yvals_signal=calc_ma(ins,period=self.period_signal,method='Exponential',v0=self.sgn_v0)
@@ -946,65 +998,66 @@ class MACDItem(StudyCurveItem):
 class BBItem(StudyCurveItem):
     def __init__(self,plt,period=cfg.D_STUDYPERIOD,mode=cfg.D_STUDYMODE,method=cfg.D_STUDYMETHOD,
         multi=cfg.BBMULTI,**kwargs):
-        fvrs=dict(period=period,mode=mode,method=method)
-        c0=dict(v0=None,init_bands=None)
-        super().__init__(plt,funkvars=fvrs,ttname='BB',dialog=BBDialog,cache0=c0,**kwargs)
-        self.multi=multi
-        self.bands=self.calc_bands()
-        self.init_bands=False
-        self.upitem=_CurveItem(self.timeseries,self.bands[0])
+        fvrs=dict(period=period,mode=mode,method=method,multi=multi)
+        self.v0=None
+        
+        super().__init__(plt,funkvars=fvrs,ttname='BB',dialog=BBDialog,**kwargs)
+        self.upitem=_CurveItem(self.timeseries,[])
         self.upitem.setParent(self)
-        self.downitem=_CurveItem(self.timeseries,self.bands[1])
+        self.downitem=_CurveItem(self.timeseries,[])
         self.downitem.setParent(self)
         self.plt.addItem(self.upitem)
         self.upitem.setPen(dict(width=self.width,color=self.color))
         self.plt.addItem(self.downitem)
         self.downitem.setPen(dict(width=self.width,color=self.color))
 
-    @property
-    def v0(self):
-        return self.cache0['v0']
-    
-    @v0.setter
-    def v0(self,x):
-        self.cache0['v0']=x
-
-    @property
-    def init_bands(self):
-        a=self.cache0['init_bands']
-        if a is None:
-            return True
-        else:
-            return self.cache0['init_bands']
-    
-    @init_bands.setter
-    def init_bands(self,x):
-        self.cache0['init_bands']=x
-
     def computef(self,ts=None):
-        return ma_computef(self,ts)
+        df=self.timeseries.data if ts is None else ts.data
+        fv=self.funkvars
+        period=fv['period']
+        method=fv['method']
+        mode=fv['mode']
+        multi=fv['multi']
 
-    def calc_bands(self):
-        up,down=[],[]
-        period=self.funkvars['period']
-        mode=self.funkvars['mode']
-        mas=self.values[1]
-        ts=self.timeseries
-        st=None
-        if not self.init_bands:
-            mas=mas[-3:]
-            st=-2-period
-        vs=study_inputs(ts,start=st,mode=mode)
-        diff=len(vs)-len(mas)
-        for i,val in enumerate(mas):
-            dev=0
-            for j in range(period):
-                dev+=pow(vs[i+diff-j]-val,2)
-            dev=sqrt(dev/period)
-            up.append(val+self.multi*dev)
-            down.append(val-self.multi*dev)
-        return [up,down]
-    
+        ins=df[mode[0].lower()][-2-period if self.cache_event else None:]
+        bands=ta.bbands(ins,length=period,std=multi)
+        ma=bands.iloc[:,1]
+        
+        if method=='Exponential':
+            sma=ma
+            ins=df[mode[0].lower()]
+            
+            # Cache processing
+            if self.cache_event and self.v0 is not None:
+                ins=ins[-2-self.ts_diff-period:] # caching array
+
+                # Tricking ta.ema() into accepting the cached ema value (self.v0) as the
+                # starting value for the recalculated bars
+                ins=ins.copy() # ensures that the source data is not modified to avoid graphical artifacts
+                ins.iloc[:period]=self.v0
+
+                ma=ta.ema(ins,length=period,sma=True)
+
+            # Non-cache processing
+            else:
+                ma=ta.ema(ins,length=period)
+
+            diff=ma-sma
+
+            # Adjusting bands
+            bands.iloc[:,0]+=diff
+            bands.iloc[:,2]+=diff
+
+            self.v0=ma.iloc[-3] # cached ema value
+        
+        downs=bands.iloc[:,0].dropna().to_numpy() # low values
+        ups=bands.iloc[:,2].dropna().to_numpy() # up values
+        if hasattr(self,"upitem") and hasattr(self,"downitem"):
+            self.upitem.set_data(self.timeseries,ups)
+            self.downitem.set_data(self.timeseries,downs)
+
+        return ma.dropna().to_numpy() # moving average values
+
     def save_props(self):
         a=super().save_props()
         a['multi']=self.multi
@@ -1014,24 +1067,17 @@ class BBItem(StudyCurveItem):
         if state is not None:
             self.multi=state['multi']
         super().set_props(state,**kwargs)
-
-    def replot(self):
-        super().replot()
-        bands=self.calc_bands()
-        self.init_bands=False
-        self.bands[0]=self.upitem.set_data(self.timeseries,bands[0])[1]
-        self.bands[1]=self.downitem.set_data(self.timeseries,bands[1])[1]
         self.upitem.setPen(dict(color=self.color,width=self.width))
         self.downitem.setPen(dict(color=self.color,width=self.width))
 
     def ttip(self):
         index,xtext,pre=self.xttip()
-        ytext=self.values[1][index]
+        ytext=self.yvalues[index]
         yname=self.funkvars['method'][0]+'MA:'
-        bb1,bb2=self.bands[0][index],self.bands[1][index]
+        upb,downb=self.upitem.yvalues[index],self.downitem.yvalues[index]
         pre=chtl.precision(self.plt.symbol) if self.precision is None else self.precision 
-        lbl='{}({},{})\n{}\n{}{:.{pr}f}\nBB1:{:.{pr}f}\nBB2:{:.{pr}f}'.format(self.ttname,self.funkvars['period'],
-            self.funkvars['mode'],xtext,yname,ytext,bb1,bb2,pr=pre)
+        lbl='{}({},{})\n{}\n{}{:.{pr}f}\nUpB:{:.{pr}f}\nDownB:{:.{pr}f}'.format(self.ttname,self.funkvars['period'],
+            self.funkvars['mode'],xtext,yname,ytext,upb,downb,pr=pre)
         return lbl
 
     def removal(self):
@@ -1052,23 +1098,10 @@ class ATRItem(StudyCurveItem):
             xtext,ytext,pr=pre)
     
     def computef(self,ts=None):
-        tseries=self.timeseries if ts is None else ts
-        fv=self.funkvars
-        st=0
-        if self.cache_event:
-            st=-2-fv['period']
-        tr=[] #true range
-        for i in range(1+st,len(tseries.closes) if not self.cache_event else 0):
-            try:
-                tr.append(max(tseries.highs[i]-tseries.lows[i],abs(tseries.highs[i]-tseries.closes[i-1]),
-                    abs(tseries.lows[i]-tseries.closes[i-1])))
-            except:
-                _p(i, len(tseries.closes))
-        return calc_ma(tr,period=fv['period'])
-
-def study_inputs(tseries,start=None,end=None,mode=cfg.D_STUDYMODE):
-    res=getattr(tseries,mode.lower()+'s')
-    return res[start:end]
+        df=self.timeseries.data if ts is None else ts.data
+        period=self.funkvars['period']
+        df=df[-2-period if self.cache_event else None:]
+        return ta.atr(df.h,df.l,df.c,length=period).dropna().to_numpy()
 
 def calc_ma(ins,period=cfg.D_MAPERIOD,method=cfg.D_STUDYMETHOD,v0=None,**kwargs):
     yres = []
@@ -1097,55 +1130,6 @@ def calc_ma(ins,period=cfg.D_MAPERIOD,method=cfg.D_STUDYMETHOD,v0=None,**kwargs)
                 yres.append(e)
     return yres
 
-def ma_computef(obj,ts=None):
-    tseries=obj.timeseries if ts is None else ts
-    fv=obj.funkvars
-    pd=fv['period']
-    mt=fv['method']
-    if obj.cache_event: 
-        if mt=='Simple':
-            st=-2-pd
-        elif mt=='Exponential':
-            st=-3-obj.ts_diff
-        else:
-            st=None
-    else:
-        st=None
-    ins=study_inputs(tseries,start=st,mode=fv['mode'])
-    if mt=='Simple':
-        yvals=calc_ma(ins,pd,mt)
-    elif mt=='Exponential':
-        yvals=calc_ma(ins,pd,mt,v0=obj.v0)
-        obj.v0=yvals[-3]
-    return yvals
 
-def sma_computef(obj,ts=None):
-    tseries=obj.timeseries if ts is None else ts
-    fv=obj.funkvars
-    st=-2-fv['period'] if obj.cache_event else None 
-    return calc_ma(study_inputs(tseries,start=st,mode=fv['mode']),fv['period'],fv['method'])
 
-def matcher(tseries,yvals,shift=0):
-    if tseries is None or yvals is None:
-        res=[None,None]
-    else:
-        tslen=len(tseries.ticks)
-        vlen=len(yvals)
-        diff=tslen-vlen
-        ticks=tseries.ticks[diff:]
-        if shift>0:
-            ticks=ticks[shift:]
-            end=ticks[-1]
-            tf=tseries.timeframe
-            for i in range(1,shift+1):
-                ticks.append(tf*i+end)
-        elif shift<0:
-            ticks=ticks[:shift]
-            start=ticks[0]
-            tf=tseries.timeframe
-            for i in range(1,-shift+1):
-                ticks.insert(0,start-i*tf)
-    
-        res=[ticks,yvals]
-    
-    return res
+

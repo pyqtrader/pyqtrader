@@ -1,4 +1,5 @@
-from Pyqtrader.Apps.lib import *
+from pandas_ta import stoch
+from cfg import DOTLINE
 
 PQitemtype='CurveIndicator'
 
@@ -11,44 +12,32 @@ WIDTH_D=1
 COLOR_D='#cc0000'
 FREEZE=True
 FREEZE_RANGE=[0,100]
-LEVELS=[{'show': True, 'value': 80.0, 'width': 0.2, 'style': '....',
+LEVELS=[{'show': True, 'value': 80.0, 'width': 0.2, 'style': DOTLINE,
 'color': '#ffffff', 'desc_on': False, 'removable': False}, 
-{'show': True, 'value': 20.0, 'width': 0.2, 'style': '....',
+{'show': True, 'value': 20.0, 'width': 0.2, 'style': DOTLINE,
 'color': '#ffffff', 'desc_on': False, 'removable': False}]
 
 PQkwords=dict(windowed=True,width=WIDTH,color=COLOR,freeze=FREEZE,
     freeze_range=FREEZE_RANGE,levels=LEVELS)
 
 def PQinitf(PQitem):
-    yv_d=calc_sma(PQitem.yvalues,period=_D)
-    PQitem.create_subitem('Curve',values=yv_d)
+    df=PQitem.timeseries.data
+    yvals_d=stoch(df.h,df.l,df.c,k=_K,d=_D,smooth_k=_SLOW).iloc[:,1].dropna().to_numpy()
+    PQitem.create_subitem('Curve',values=yvals_d)
     PQitem.subitems[0].setPen(dict(width=WIDTH_D,color=COLOR_D))
 
 def PQcomputef(PQitem):
-    series=PQitem.series
-    highs=series.highs
-    lows=series.lows
-    closes=series.closes
-    y = []
-    lng=len(closes)
-    st=lng-2-_K-_SLOW-_D if PQitem.cache_event else _K #caching processing
-    for i in range(st,lng):
-        highest=max(highs[i+1-_K:i+1])
-        lowest=min(lows[i+1-_K:i+1])
-        res=100*(closes[i]-lowest)/(highest-lowest) if highest-lowest!=0 else 50
-        y.append(res)
+    df=PQitem.timeseries.data
+    
+    ins=df[-2-(_K+_SLOW+_D) if PQitem.cache_event else None:]
 
-    res=calc_sma(y,period=_SLOW)
-    return res
+    s=stoch(ins.h,ins.l,ins.c,k=_K,d=_D,smooth_k=_SLOW)
 
-def PQreplot(PQitem):
-    start=-2-_D if PQitem.cache_event else None #preceds mredraw() to ensure execution before 
-                                         #self.cache_event is reset
-    PQitem.mreplot()
-    yv_d=calc_sma(PQitem.yvalues[start:],period=_D)
-    if PQitem.subitems != []:
-        si=PQitem.subitems[0]
-        si.update_subitem(yv_d)        
+    yvals_d=s.iloc[:,1].dropna().to_numpy()
+    if len(PQitem.subitems)>0:
+        PQitem.subitems[0].update_subitem(yvals_d) 
+
+    return s.iloc[:,0].dropna().to_numpy()
 
 def PQstudylabel(PQitem):
     v=PQitem.yvalues

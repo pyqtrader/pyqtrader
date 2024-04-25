@@ -48,7 +48,7 @@ def history(tf,symbol, bars=0):
             df=pd.read_csv(filename)
             df.drop_duplicates(subset=df.columns[0],inplace=True)
             df.reset_index(drop=True,inplace=True)
-            df.to_csv(filename,index=True,header=False)
+            df.to_csv(filename,index=False,header=False)
             return True
         except ValueError as e:
             return e
@@ -115,28 +115,18 @@ class Fetcher(QtCore.QObject):
     def trigger(self):
         self.connected= not self.connected
         self.sigConnectionStatusChanged.emit(self.connected)
-
-    def fetch_data(self,session=None, record=False, record_mode='a',symbol=cfg.D_SYMBOL, 
-            fromdt=None, todt=None, count=cfg.D_BARCOUNT,timeframe=cfg.D_TIMEFRAME, indexcut=0):
+    
+    def fetch_data(self,session=None,symbol=cfg.D_SYMBOL, fromdt=None, todt=None, 
+            count=cfg.D_BARCOUNT,timeframe=cfg.D_TIMEFRAME):
         
         #--------- breakpoint for the offline mode or short symbol names:
         if self.offline_mode or len(symbol)<6:
-            return {'data': None,'complete': True}
+            return None
         ############
         
         instrument=symbol[:-3]+'_'+symbol[-3:]
-        datalist=None
-        granularity=tf_to_grn(timeframe)
-        
-        saved_df=None
-        if record==True:
-            datasource=chtl.symbol_to_filename(symbol,oa_dict[granularity]['tf'], fullpath=True)
-            # cfg.DATA_SYMBOLS_DIR+symbol+'_'+oa_dict[granularity]['tf']+'.csv'
-            if os.path.isfile(datasource) and os.stat(datasource).st_size!=0:
-                saved_df=pd.read_csv(datasource)
-                indexcut=int(saved_df.iloc[-1].iloc[0]+1)
-                fromdt=saved_df.iloc[-1].iloc[1]+timeframe
-
+        granularity=tf_to_grn(timeframe)    
+    
         if fromdt is None:
             params = dict(count=count,granularity = granularity,smooth=OA_SMOOTH, price=OA_PRICE)
         else:
@@ -187,10 +177,11 @@ class Fetcher(QtCore.QObject):
         except Exception:
             lc_complete=True
 
-        try:
-            ohlc=['o','h','l','c']
-            our_data=[]
+        ohlc=['o','h','l','c']
+        our_data=[]
 
+        # Return None if server request failed or dataframe cannot be formed
+        try:
             for candle in data['candles']:
                 new_dict={}
                 new_dict['time']=candle['time']
@@ -198,48 +189,28 @@ class Fetcher(QtCore.QObject):
                     new_dict[oh]=candle['mid'][oh]
                 our_data.append(new_dict)
 
-            def dfreader(dt):
-                df=pd.DataFrame.from_dict(dt)
-                df['time'] = pd.to_datetime(df['time']) #.apply(lambda x: x.value)//10**9 - alternative method, 
-                # it is believed to be slower but is one liner and does not require numpy
-                df['time']=df.time.values.astype(np.int64) // 10 ** 9
-                df.index=df.index+indexcut
-                return df
+            df=pd.DataFrame.from_dict(our_data)
+            df['time'] = pd.to_datetime(df['time']) #.apply(lambda x: x.value)//10**9 - alternative method, 
+            # it is believed to be slower but is one liner and does not require numpy
+            df['time']=df.time.values.astype(np.int64) // 10 ** 9
+            df[ohlc]=df[ohlc].astype(np.float64)
+            df.columns=cfg.TS_NAMES
+        except Exception as e:
+            print(repr(e))
+            return None
 
-            candles_df=dfreader(our_data)
-            # candles_df.index=candles_df.index+indexcut
-        
-            if saved_df is not None: #double check to ensure non-duplication of candles
-                c=candles_df.iloc[0].iloc[0] #time stamp
-                s=saved_df.iloc[-1].iloc[1] #time stamp
-                if c==s:
-                    our_data.pop(0) #remove duplicating entry
-                    candles_df=dfreader(our_data)
-            
-            if record==True:
-                if lc_complete==False:
-                    our_data.pop()        
-                cdf=dfreader(our_data)
-                #Remove duplicate rows
-                cdf.drop_duplicates(subset=['time'],inplace=True)
-                cdf.reset_index(drop=True,inplace=True)
-                cdf.to_csv(datasource, mode=record_mode,header=False)
-            
-            datalist=candles_df.reset_index().values.tolist()
-            for i,row in enumerate(datalist):
-                for j,val in enumerate(row):
-                    x=float(val) if isinstance(val,str) else val
-                    datalist[i][j]=x
-        except Exception:
-            pass
-
-        return {'data': datalist,'complete':lc_complete}
+        return {'data': df,'complete':lc_complete}
 
     def fetch_lc(self,session=None,symbol=cfg.D_SYMBOL,timeframe=cfg.D_TIMEFRAME): #fetch last candle       
         if self.offline_mode:
             return None
         else:
-            a=self.fetch_data(session=session,record=False,symbol=symbol, 
-                fromdt=None, todt=None, count=1,timeframe=timeframe, indexcut=0)
+            a=self.fetch_data(session=session,symbol=symbol, count=1,timeframe=timeframe)
             return a
 
+if __name__ == '__main__':
+    fetch=Fetcher()
+    lc=fetch.fetch_lc()['data'].to_dict()
+    
+    for key in lc:
+        print(key,type(lc[key][0]))

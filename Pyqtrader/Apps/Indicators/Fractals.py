@@ -1,5 +1,3 @@
-from Pyqtrader.Apps import lib
-
 PQitemtype='TextIndicator'
 
 BARSBACK=50
@@ -92,5 +90,3 @@ def PQcomputef(PQtext):
                 newsi=PQtext.create_subitem('Text')
                 mark(PQtext,newsi,i,False)
                 
-# def PQdeinitf(PQtext):
-#     PQtext.sigSeriesChanged.disconnect(PQupdatef)

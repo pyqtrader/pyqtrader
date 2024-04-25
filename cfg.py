@@ -1,9 +1,8 @@
 from PySide6 import QtCore
 
-COMPANY_NAME='pyqtrader'
 PROGRAM_NAME='pyqtrader'
 
-VERSION='1.0'
+VERSION='1.1'
 
 DYNAMIC_QUERYING=True #continuous updating from the data provider, set False to turn off (no QTimer initiation) 
 
@@ -81,6 +80,16 @@ D_TFLABEL=tf_to_label(D_TIMEFRAME)
 
 CHARTTYPES=('Bar','Candle','Line')
 D_CHARTTYPE='Candle'
+
+#Timeseries names
+TICKS='i'
+TIMES='t'
+OPENS='o'
+HIGHS='h'
+LOWS='l'
+CLOSES='c'
+
+TS_NAMES=[TIMES,OPENS,HIGHS,LOWS,CLOSES]
 
 #Directories
 MAIN_DIR='./Pyqtrader/'

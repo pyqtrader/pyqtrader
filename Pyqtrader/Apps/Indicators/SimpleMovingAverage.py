@@ -1,8 +1,9 @@
-from Pyqtrader.Apps.lib import *
+from pandas_ta import sma
+from cfg import OPENS, HIGHS, LOWS, CLOSES
 
 PQitemtype='CurveIndicator'
 
-MODE='Close'
+MODE=CLOSES
 PERIOD=20
 WIDTH=1
 COLOR='#ff0000'
@@ -10,16 +11,14 @@ COLOR='#ff0000'
 PQkwords=dict(width=WIDTH,color=COLOR)
 
 def PQcomputef(PQitem):
-    series=PQitem.series
-    if PQitem.cache_event:     
-        st=-2-PERIOD
-    else:
-        st=None
-
-    ins=inputs(series,mode=MODE,start=st)
-    yvals=calc_sma(ins,PERIOD)
+    # Timeseries dataframe:
+    df=PQitem.timeseries.data
     
-    return yvals
+    # Calculate only 2 last values if the entire sma series has already been cached,
+    # otherwise calculate the entire sma series
+    ins=df[MODE].iloc[-2-PERIOD if PQitem.cache_event else None:]
+    
+    return sma(ins,length=PERIOD).dropna().to_numpy()
 
 def PQtooltip(PQitem):
     index,xtext,ytext,precision=PQitem.tooltipinfo

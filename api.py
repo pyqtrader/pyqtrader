@@ -112,7 +112,7 @@ class apiBase:
             ts=kwargs['timeseries']
         
         if itype=='Curve':
-            if values==(0,0): values=[0]    
+            if type(values)==tuple and values==(0,0): values=[0]    
             si=studies._CurveItem(ts,values)
         
         elif itype=='Bar':
@@ -173,8 +173,6 @@ class apiBase:
 
     def removal(self):
         self.deinitf()
-        try:self.sigSeriesChanged.disconnect()
-        except Exception: pass
         return super().removal()
         
 class _apiItem:
@@ -430,12 +428,10 @@ def api_study_factory(base):
         def replot(self):
             sm=self.smodule
             if hasattr(sm,'PQreplot'):
+                super().replot()
                 return sm.PQreplot(self)
             else:
                 return super().replot()
-        
-        def mreplot(self):
-            return super().replot()
 
         def set_api(self,props):
             if hasattr(self,'caller') and self.caller=='open_subw':
@@ -532,7 +528,7 @@ def api_noncurve_study_factory(base):
             if values is not None:
                 self.set_data(values)
             self.plt.lc_thread.sigLastCandleUpdated.connect(self.replot)
-            self.plt.lc_thread.sigInterimCandleUpdated.connect(self.replot)
+            self.plt.lc_thread.sigInterimCandlesUpdated.connect(self.replot)
 
         def set_props(self,props):
             super().set_props(props)
@@ -554,7 +550,7 @@ def api_noncurve_study_factory(base):
             self.timeseries=ts
             self.replot()
             self.plt.lc_thread.sigLastCandleUpdated.connect(self.replot)
-            self.plt.lc_thread.sigInterimCandleUpdated.connect(self.replot)
+            self.plt.lc_thread.sigInterimCandlesUpdated.connect(self.replot)
 
         def ttip(self): #full override
             sm=self.smodule
@@ -566,7 +562,7 @@ def api_noncurve_study_factory(base):
         def remove_act(self):
             error=None
             self.plt.lc_thread.sigLastCandleUpdated.disconnect(self.replot)
-            self.plt.lc_thread.sigInterimCandleUpdated.disconnect(self.replot)
+            self.plt.lc_thread.sigInterimCandlesUpdated.disconnect(self.replot)
             for si in self.subitems:
                 if hasattr(si,'removal'):
                     si.removal()

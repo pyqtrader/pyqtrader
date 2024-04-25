@@ -4,6 +4,7 @@ from pyqtgraph import Point
 import datetime
 import numpy as np
 import pandas as pd
+from pytz import timezone, UnknownTimeZoneError
 
 import overrides as ovrd,overrides
 import cfg
@@ -56,11 +57,7 @@ def times_to_ticks(ts,x):
     elif x<=ts.times[0]:
         result=ts.ticks[0]-(ts.times[0]-x)
     else:
-        i=len(ts.times)-2
-        while i>=0:
-            if ts.times[i]<=x and x<ts.times[i+1]:
-                break
-            i-=1
+        i=np.where((ts.times<=x) & (x<ts.times+tf))[0][0]
         result=ts.ticks[i]
     
     return result
@@ -263,20 +260,37 @@ def filename_to_symbol(filename):
     
     return symbol, cfg.TIMEFRAMES[timeframe_label]
 
-class ListToDataframe:
-    def __init__(self,datalist,columns=('i','t','o','h','l','c')) -> None:
-        self.columns=columns
-        self.df=pd.DataFrame(datalist,columns=self.columns)
-    
-    #Update the dataframe at server ticks
-    def refresh(self,datalist):
-        if len(self.df) == len(datalist):
-            self.df.iloc[-2:] = datalist[-2:]
-        elif len(datalist) > len(self.df):
-            self.df.iloc[-1] = datalist[len(self.df) - 1]
-            self.df = pd.concat([self.df, pd.DataFrame(datalist[len(self.df):], columns=self.df.columns)], ignore_index=True)
-        else:
-             self.df=pd.DataFrame(datalist,columns=self.columns)
+def get_timezone_shift(timezone_1, timezone_2):
+		"""
+		This function calculates the time difference between two timezones in hours.
 
-def pipper(symbol="EURUSD"):
-    return 10**(precision(symbol)-1)
+		Args:
+			timezone_1 (str): The first timezone name (e.g., 'US/Eastern').
+			timezone_2 (str): The second timezone name (e.g., 'Asia/Tokyo').
+
+		Returns:
+			float: The time difference between the two timezones in hours (positive or negative).
+
+		Raises:
+			ValueError: If any of the provided timezones are invalid.
+		"""
+		try:
+			tz_obj_1 = timezone(timezone_1)
+			tz_obj_2 = timezone(timezone_2)
+		except UnknownTimeZoneError:
+			raise ValueError("Invalid timezone provided")
+
+		# Get the UTC offset for each timezone in seconds
+		utc_offset_1 = tz_obj_1.utcoffset(datetime.now()).total_seconds() / 3600
+		utc_offset_2 = tz_obj_2.utcoffset(datetime.now()).total_seconds() / 3600
+
+		# Calculate the time difference in hours
+		time_diff = utc_offset_2 - utc_offset_1
+		return int(time_diff)
+
+def to_pips(symbol:str =None):
+    return 10**(precision(symbol if symbol else "EURUSD")-1)
+
+def to_points(symbol: str=None):
+    return 10*to_pips(symbol)
+

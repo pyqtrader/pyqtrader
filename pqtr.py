@@ -816,7 +816,7 @@ class MDIWindow(QtWidgets.QMainWindow):
             lc_item=tmss.PlotTimeseries(symbol,ct,ts=tseries,session=self.session,
                 fetch=self.fetch,start=-1,chartprops=plt.chartprops)
         plt.link_chartitem(item,lc_item)
-        xax=ovrd.AltDateAxisItem(item.times, item.last_tick, item.timeframe,chartprops=plt.chartprops)
+        xax=ovrd.AltDateAxisItem(item.times, item.ticks[-1], item.timeframe,chartprops=plt.chartprops)
         plt.setAxisItems({"bottom":xax})
         plt.subwindow.setWindowTitle(item.symbol+","+item.tf_label+plt.description)
         plt.addItem(item)
@@ -828,7 +828,7 @@ class MDIWindow(QtWidgets.QMainWindow):
     def range_setter(self,plt,item,last_tick=None,xcount=cfg.DX_COUNT, 
             xshift=cfg.DX_SHIFT,yzoom=cfg.DY_ZOOM):
         tf=item.timeframe
-        XLast=item.last_tick if last_tick is None else last_tick
+        XLast=item.ticks[-1] if last_tick is None else last_tick
         plt.setXRange(XLast-xcount*tf,XLast+xshift*tf,padding=0)
         xl= int (XLast//tf)
         ymax=item.ymax(xl-xcount,xl)
@@ -849,11 +849,11 @@ class MDIWindow(QtWidgets.QMainWindow):
                 old_cbl_item=plt.chartitem
                 old_tf=plt.chartitem.timeframe
                 xax=plt.getAxis('bottom')
-                xc =int((min(old_cbl_item.last_tick,xax.range[1])-xax.range[0])//old_tf)
-                xs=int((max(old_cbl_item.last_tick,xax.range[1])-old_cbl_item.last_tick)//old_tf)                       
+                xc =int((min(old_cbl_item.ticks[-1],xax.range[1])-xax.range[0])//old_tf)
+                xs=int((max(old_cbl_item.ticks[-1],xax.range[1])-old_cbl_item.ticks[-1])//old_tf)                       
                 
                 timepoint=None
-                if old_cbl_item.first_tick < xax.range[1] < old_cbl_item.last_tick: 
+                if old_cbl_item.ticks[0] < xax.range[1] < old_cbl_item.ticks[-1]: 
                     for x in range(len(old_cbl_item.times)): 
                         if xax.range[1]-old_cbl_item.ticks[x]<=old_tf:
                             timepoint=old_cbl_item.times[x]
@@ -887,7 +887,7 @@ class MDIWindow(QtWidgets.QMainWindow):
                 new_cbl_item=self.cbl_plotter(plt,symbol=new_sy,ct=new_ct, tf=new_tf)
                 
                 if timepoint is None:
-                    xl=new_cbl_item.last_tick                          
+                    xl=new_cbl_item.ticks[-1]                          
                 else:
                     for x in range(len(new_cbl_item.ticks)):
                         if timepoint-new_cbl_item.times[x]<=new_tf:
@@ -944,7 +944,7 @@ class MDIWindow(QtWidgets.QMainWindow):
             item=None
             try:
                 item=self.cbl_plotter(plt)
-            except FileNotFoundError as e:
+            except Exception as e:
                 for file in os.listdir(cfg.DATA_SYMBOLS_DIR):
                     fl=chtl.filename_to_symbol(file)
                     if fl is not None:

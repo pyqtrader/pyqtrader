@@ -1001,7 +1001,7 @@ class SettingsDialog(QtWidgets.QDialog):
             import os
             for root,dirs,files in os.walk(cfg.DATA_SYMBOLS_DIR):
                 for f in files:
-                    if '.py' not in f:
+                    if '.py' not in f and 'MODEL' not in f:
                         os.remove(cfg.DATA_SYMBOLS_DIR+f)
 
 class TreeSubWindow(QtWidgets.QMdiSubWindow):
@@ -1012,7 +1012,6 @@ class TreeSubWindow(QtWidgets.QMdiSubWindow):
             if isinstance(sw,TreeSubWindow):
                 return
         super().__init__()
-        self.setWindowIcon(QtGui.QIcon('./assets/m-11.png'))
         self.setWindowTitle("User Apps")
         self.is_persistent=True
         self.tree=QtWidgets.QTreeView()
