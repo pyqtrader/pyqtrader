@@ -3,20 +3,23 @@ from PySide6 import QtWidgets,QtCore,QtGui
 import math, time, datetime
 import numpy as np
 import pyqtgraph as pg
-from pyqtgraph import Point
+from pyqtgraph import Point, ROI
 from pyqtgraph.graphicsItems.TargetItem import TargetItem
+import typing
 
 import cfg
 import overrides as ovrd, overrides
 import timeseries as tmss, timeseries
+from timeseries import dtPoint, dtCords
 import charttools as chtl,charttools
 import uitools
+
 
 #debugging section
 from _debugger import _print,_printcallers,_exinfo,_ptime,_c,_p,_pc,_pp,_fts
 
 class DrawProps:
-    def INIT(self,mwindow,props=None,caller=None):
+    def config_props(self,mwindow,props=None,caller=None):
         self.is_persistent=True
         self.is_draw=True
         self.props=dict(width=1,color=None,style=cfg.D_STYLE)
@@ -62,6 +65,14 @@ class DrawProps:
     @style.setter
     def style(self,x):
         self.props['style']=x
+    
+    @property
+    def raydir(self):
+        return self.props.get('raydir',None)
+    
+    @raydir.setter
+    def raydir(self,x):
+        self.props['raydir']=x
 
     # def unpack_props(self): #to use instead of @property if the latter fails
     #     for key in self.props:
@@ -77,6 +88,9 @@ class DrawProps:
             self.hoverPen=pg.functions.mkPen(**pen)
         if self.is_persistent and self.caller!='open_subw':
             self.mwindow.props[self.myref]=self.get_props()
+    
+    def update_props(self):
+        self.set_props(self.props)
     
     def childobjects(self):
         a=[] if not hasattr(self,'children') else self.children()
@@ -113,34 +127,37 @@ class DrawProps:
 
     def item_replicate(self):
         newitem=self.__class__(self.plt)
-        self.plt.addItem(newitem)
-        if hasattr(newitem,'set_dt'):
-            newitem.set_dt(self.save_dt())
+        if newitem not in self.plt.listItems():
+            self.plt.addItem(newitem)
+        if hasattr(newitem,'set_dtc'):
+            newitem.set_dtc(self.get_dtc())
         if hasattr(newitem,'set_props'):
             newitem.set_props(self.save_props())
         if hasattr(newitem,'set_selected'):
             newitem.set_selected(True)
 
-class DrawItem(DrawProps): #ROI generic class
+class DrawItem(DrawProps): #ROI generic abstract class
     sigHoverLeaveEvent=QtCore.Signal(object)
     def __init__(self,plt,dockplt=None,dialog=uitools.DrawPropDialog,clicks=2,
-        props=None,caller=None):
-        super().INIT(plt.mwindow,props=props,caller=caller)
+        props=None,caller=None, ray=None, menu_name=None):
+        super().config_props(plt.mwindow,props=props,caller=caller)
         self.timeseries=plt.chartitem.timeseries
         self.plt=plt if dockplt is None else dockplt
         self.precision=self.plt.precision
         self.dialog=dialog
         self.hsz=cfg.HANDLE_SIZE
-        try:
-            self.context_menu=self.create_menu()
-        except Exception:
-            pass
-        self.ray_on=False
         self.clicks=clicks
-        self.click_count=1
+        self.click_count=1 # the item initiates at the first click on the chart
         self.is_new=False #to inform derivative classes whether the item is new
         if self.color is None:
             self.color=self.plt.graphicscolor
+        
+        self.raydir=ray
+
+        self.menu_name=menu_name
+        self.context_menu=self.create_menu(description=menu_name) if menu_name else None
+
+        self._dtc=dtCords.make(n=clicks).apply(dtPoint(ts=self.timeseries))
 
     def addHandle(self, *args, **kwargs): #imported module override (handle size)
             self.handleSize = self.hsz
@@ -148,17 +165,19 @@ class DrawItem(DrawProps): #ROI generic class
             self.handleHoverPen=self.handlePen
             super(DrawItem,self).addHandle(*args, **kwargs)
 
-    def initialisation(self):
-        self.state=self.getState()
-        self.xy=self.read_state()
-        self.dtxy= chtl.zeroP(self.clicks if self.clicks is not None else 0)
-        self.xy_ticks_to_times() # conversion from timeseries.ticks to timeseries.times
+    def config_item(self):
+        self.set_dtc(self.rawdtc,force=True)
         self.change=False #user drag state monitoring
         super(DrawItem,self).setZValue(0)
         
         self.setAcceptedMouseButtons(QtCore.Qt.MouseButton.LeftButton | QtCore.Qt.MouseButton.RightButton)
+        
+        # Below singal connections ensure that only mechanical (non-programmatic) 
+        # changes are processed by mouse_update() function in order to avoid  changes of the 
+        # cached dt values by non-mechanical functions such as ts_update().
         self.sigRegionChangeStarted.connect(self.change_state)
         self.sigRegionChangeFinished.connect(self.mouse_update)
+
         # uncomment to unsupress the handles, see overrides
         # self.sigHoverEvent.connect(lambda *args: self.hvr(hovered=True))
         # self.sigHoverLeaveEvent.connect(lambda *args: self.hvr(hovered=False))
@@ -172,70 +191,73 @@ class DrawItem(DrawProps): #ROI generic class
         else: #to ensure exclusion of the setup routine when item already exists (fix trendline non-deletion bug)
             self.click_count=self.clicks
     
+    # Raw coordinates
+    @property
+    def rawdtc(self):
+        # Should return dtCords (set of dtPoints) consisting of None, and raw x,y adjusted by the pos
+        # set as property for brevity
+        raise NotImplementedError('rawdtc is not implemented')
+
+    def get_dtc(self):
+                
+        return self.rawdtc.fillnone(self._dtc)
+    
+    def save_dtc(self):
+
+        return self.get_dtc().rollout()
+
+    # Sets dt coordinates and returns True if the real position is to be updated and False otherwise
+    def set_dtc(self, dtc : dtCords|dtPoint|list|tuple|None,force=False)->bool:
+        '''
+        Function serves as the single unified point of setting coordinates.
+        Function 
+        - sets position based on dtc if 1 or 3 pos args are given
+        - sets dtc based on pos if 2 pos args are given
+        - refreshes pos based on dtc where no args are given, eg. at timeseries change
+        - processes JSON based saved data to restore position
+        
+        kwargs:
+        - force: forces update of real position even where only raw coordinates are given.
+        Default: False, to avoid updating real position where it is updated externally, eg. in __init__ or
+        mouse_update().   if only raw coordinates are given and force is False, the attributes are updated 
+        but the the real position is not.
+
+        Returns True if the real position is updated and False otherwise
+        ''' 
+        c=dtc if type(dtc) in (dtCords,dtPoint) else dtCords([dtPoint(*dtp) for dtp in dtc])
+ 
+        self._dtc=self._dtc.apply(c)                
+
+        # dont set real position solely based on raw coords unless explicitly forced
+        # to avoid idle real repositioning eg. on mouse_updates
+        if force:
+            update_pos=True
+        elif type(c)==dtPoint:
+                update_pos=(c.dt is not None or c.ts is not None)
+        elif type(c)==dtCords:
+            update_pos=(c.cords[0].dt is not None or c.cords[0].ts is not None)
+        else:
+            raise TypeError("Invalid input type")
+      
+        return update_pos
+
     def mouseClickEvent(self, ev):
         if ev.button()==QtCore.Qt.MouseButton.LeftButton:
             self.left_clicked(ev)
         elif ev.button()==QtCore.Qt.MouseButton.RightButton:
             self.right_clicked(ev)
         return super().mouseClickEvent(ev)
-                 
-    def xy_ticks_to_times(self):
-        xy=self.xy
-        try:
-            self.dtxy=chtl.zeroP(len(xy)) #to ensure equal length of xy and dtxy lists
-            for i in range(len(xy)):
-                self.dtxy[i][0]=chtl.ticks_to_times(self.timeseries,xy[i][0])
-                self.dtxy[i][1]=xy[i][1]
-        except Exception:
-            print ('Ticks-to-times conversion failed')
-        return self.dtxy
-    
-    def xy_times_to_ticks(self):
-        dtxy=self.dtxy
-        try:
-            self.xy=chtl.zeroP(len(dtxy)) #to ensure equal length of xy and dtxy lists
-            for i in range(len(dtxy)):
-                self.xy[i][0]=chtl.times_to_ticks(self.timeseries,dtxy[i][0])
-                self.xy[i][1]=dtxy[i][1]
-        except Exception as e:
-            print ('Times-to-ticks conversion failed: ',e)
-        return self.xy
-
-    def redraw(self):
-        self.xy_times_to_ticks()
-        self.write_state()
-        self.setState(self.state)
     
     def ts_change(self,ts):
         self.timeseries=ts
-        self.redraw()
+        self.set_dtc(dtPoint(ts=ts))
     
     def set_selected(self, s):
         self.translatable=s #translatable=movable
         self.setSelected(s)
 
     def mouse_update(self):
-        self.state=self.getState()
-        def lf():
-            if self.change:
-                self.xy=self.read_state()
-                self.xy_ticks_to_times()
-                self.change=False
-        try: #for rois with points
-            pos=self.state['pos']
-            points=self.state['points']
-            if pos!=Point(0,0): #convert pos to Point(0,0) to ensure compatibility with dialogs and coordinates
-                points=[point+pos for point in points]
-                pos=Point(0,0)
-                self.state['pos']=pos
-                self.state['points']=points
-                self.setState(self.state)
-                self.xy=self.read_state()
-                self.xy_ticks_to_times()
-            else:
-                lf()
-        except Exception:
-            lf()
+        raise NotImplementedError('mouse_update is not implemented')
                 
     def change_state(self):
         self.change=True
@@ -252,18 +274,8 @@ class DrawItem(DrawProps): #ROI generic class
     # def hvr(self, hovered=True):
     #     if hovered or (hovered==False and self.translatable==False):
     #         self.setSelected(hovered)
-    
-    def save_dt(self):
-        return [list(a) for a in self.dtxy]
 
-    def set_dt(self,dtxy):
-        self.dtxy=dtxy
-        self.xy_times_to_ticks()
-        self.state=self.getState()
-        self.write_state()
-        self.setState(self.state)
-
-    def create_menu(self,ray_on=False,description=None):
+    def create_menu(self,description=None):
         context_menu=QtWidgets.QMenu()
         if description is not None:
             context_menu.addSection(description)
@@ -272,8 +284,7 @@ class DrawItem(DrawProps): #ROI generic class
         self.liftup_act=context_menu.addAction('Lift up')
         context_menu.addSeparator()
         self.rem_act=context_menu.addAction('Remove')
-        if ray_on==True:
-            self.ray_on=True
+        if self.raydir:
             self.ray_submenu=QtWidgets.QMenu('Ray')
             context_menu.insertMenu(self.prop_act,self.ray_submenu)
             self.ray_right_act=self.ray_submenu.addAction(cfg.RAYDIR['r']) 
@@ -297,128 +308,112 @@ class DrawItem(DrawProps): #ROI generic class
         elif self.maction==self.liftup_act:
             zv=self.zValue()
             self.setZValue(zv+1)
-        if self.ray_on==True:
-            def fray(rd):
-                self.props['extension']=rd
-                self.set_props(self.props)
-                self.repaint_ray()
+        if self.raydir:
             if self.maction == self.ray_right_act:
-                raydir=chtl.ray_mode(self.props['extension'],cfg.RAYDIR['r'])
-                fray(raydir)
+                self.raydir=chtl.ray_mode(self.raydir,cfg.RAYDIR['r'])
+                self.set_props(self.props)
             elif self.maction == self.ray_left_act:
-                raydir=chtl.ray_mode(self.props['extension'],cfg.RAYDIR['l'])
-                fray(raydir)
-            self.plt.vb.update()
-            self.redraw()
-    
+                self.raydir=chtl.ray_mode(self.raydir,cfg.RAYDIR['l'])
+                self.set_props(self.props)
+
     def update_menu(self):
-        if self.props['extension']==cfg.RAYDIR['b']:
+        if self.raydir==cfg.RAYDIR['b']:
             self.ray_right_act.setChecked(True)
             self.ray_left_act.setChecked(True)
-        elif self.props['extension']==cfg.RAYDIR['n']:
+        elif self.raydir==cfg.RAYDIR['n']:
             self.ray_right_act.setChecked(False)
             self.ray_left_act.setChecked(False)
-        elif self.props['extension']==cfg.RAYDIR['r']:
+        elif self.raydir==cfg.RAYDIR['r']:
             self.ray_right_act.setChecked(True)
             self.ray_left_act.setChecked(False)
-        elif self.props['extension']==cfg.RAYDIR['l']:
+        elif self.raydir==cfg.RAYDIR['l']:
             self.ray_right_act.setChecked(False)
             self.ray_left_act.setChecked(True)
         else:
             self.ray_right_act.setChecked(False)
             self.ray_left_act.setChecked(False)
-    
-    def repaint_ray(self):
-        pass
-
-    # def read_state(self):
-    #     pass
-
-    # def write_state(self):
-    #     pass
 
     def setup_mouseclicks(self,mouseClickEvent):
         if mouseClickEvent.button()==QtCore.Qt.MouseButton.LeftButton:
-            xy=Point(self.plt.vb.mapSceneToView(mouseClickEvent.scenePos()))
-            self.click_count+=1
+            xy=self.plt.mapped_xy #Point(self.plt.vb.mapSceneToView(mouseClickEvent.scenePos()))
+            self.click_count+=1 # the function kicks in at the second click on chart
+            
+            # self.clicks==None is used for dynamic endpoint lists such as polylines. 
             if self.clicks is None or self.click_count<self.clicks:
-                self.xy.append(xy)
-                self.write_state()
-                self.setState(self.state)
+                update_dtc=dtCords.make(n=self.clicks if self.clicks else self.click_count+1).set_cord(self.click_count-1,dtPoint(None,*xy))
+                self.set_dtc(update_dtc,force=True)
+                self.set_selected(True)
             else:
-                self.write_state()
-                self.setState(self.state)
-                self.xy_ticks_to_times()
+                update_dtc=dtCords.make(n=self.clicks).set_cord(self.click_count-1,dtPoint(None,*xy))
+                self.set_dtc(update_dtc,force=True)
                 self.plt.scene().sigMouseClicked.disconnect(self.setup_mouseclicks)
                 self.set_selected(True)
 
     def setup_mousemoves(self,mouseMoveEvent):
         xy=Point(self.plt.vb.mapSceneToView(mouseMoveEvent))
+        i=-1 if self.clicks is None else self.click_count # -1 for polyline
         if self.clicks is None or self.click_count<self.clicks:
-            self.xy[-1]=xy
-            self.write_state()
-            self.setState(self.state)
+            update_dtc=dtCords.make(n=len(self._dtc)).set_cord(i,dtPoint(None,*xy))
+            self.set_dtc(update_dtc,force=True)
         else:
             self.plt.scene().sigMouseMoved.disconnect(self.setup_mousemoves)
 
-    def magnetize(self,hls=2):#hls is the number of handles to be magnetized: 2- both, 1 - only the first
-                                #This is needed for channel sync 
-        if self.translatable: # and self.click_count==self.clicks:
-            props=self.plt.mwindow.props
-            yes=props['magnet']
-            mapper=lambda x: self.mapFromDevice(x)
-            mp0=mapper(Point(0,0))
-            if yes and mp0 is not None:
-                df=self.timeseries.data
-                ticks=self.timeseries.ticks
+    def magnetize(self) -> None:
+        
+        if not self.plt.mwindow.props['magnet'] or not self.translatable: 
+            return
+        
+        mapper=lambda x: self.mapFromDevice(x)
+        mp0=mapper(Point(0,0))
+        if mp0 is None:
+            return
+        
+        df=self.timeseries.data
+        ticks=self.timeseries.ticks
+        
+        vect=mapper(Point(cfg.MAGNET_DISTANCE,cfg.MAGNET_DISTANCE))-mp0
+        vect=Point(abs(vect.x()),abs(vect.y()))
+        cnt=0
+        r=self.rawdtc
+        for cnt in range(len(r)):
+            diff=np.abs(ticks-r.cords[cnt].x)
+            closest_index=np.argmin(diff)
+            if diff[closest_index]<vect.x():
+                magbar=df.iloc[closest_index] #magnetized bar
+                prices=magbar.loc['o':'c'].to_numpy()
+                diff=abs(prices-r.cords[cnt].y)
+                closest_price=np.argmin(diff)
+                                        
+                if diff[closest_price]<vect.y():
+                    r.set_cord(cnt,dtPoint(None, ticks[closest_index],prices[closest_price]))
+                    self.set_dtc(r,force=True)
 
-                state=self.getState()
-                pts=state['points']
-                
-                vect=mapper(Point(cfg.MAGNET_DISTANCE,cfg.MAGNET_DISTANCE))-mp0
-                vect=Point(abs(vect.x()),abs(vect.y()))
-                cnt=0
-                while cnt<min(hls,len(pts)): #fix pitchfork initial setup
-                    diff=np.abs(ticks-pts[cnt][0])
-                    closest_index=np.argmin(diff)
-                    if diff[closest_index]<vect.x():
-                        magbar=df.iloc[closest_index] #magnetized bar
-                        prices=magbar.loc['o':'c'].to_numpy()
-                        diff=abs(prices-pts[cnt][1])
-                        closest_price=np.argmin(diff)
-                        if diff[closest_price]<vect.y():
-                            state['points'][cnt]=Point(ticks[closest_index],
-                                                       prices[closest_price])
-                            self.setState(state)
-                            self.xy=state['points']
-                            self.xy_ticks_to_times()
-                    cnt+=1
-    
+        return
+
     def removal(self):
         self.plt.subwindow.plt.sigTimeseriesChanged.disconnect(self.ts_change)
         self.plt.removeItem(self)
 
-class DTrendLineDialog(uitools.DrawPropDialog):
+class DTrendLineDialog(uitools.DrawPropDialog): 
     initials=dict(uitools.DrawPropDialog.initials)
     levels=None
-    def __init__(self,*args, tseries=None,dtxy=chtl.zero2P(),exec_on=True,**kwargs):
+    def __init__(self,*args, tseries=None,dtc=dtCords().zero(),exec_on=True,**kwargs):
         super().__init__(*args, **kwargs)
-        self.setWindowTitle('Trendline')
         if exec_on==True: #to isolate the class variable from subclasses
             self.setup_extension()
         self.tseries=tseries
-        self.dtx,self.dtxs=[None,None],[None,None]
+        self.dt,self.dts=[None,None],[None,None]
         self.dte=[None,None]
-        self.dtx[0]=dtxy[0][0]
-        self.dtxs[0] = datetime.datetime.fromtimestamp(self.dtx[0])
-        self.dtx[1]= dtxy[1][0]
-        self.dtxs[1] = datetime.datetime.fromtimestamp(self.dtx[1])
-        self.yv0=dtxy[0][1]
-        self.yv1=dtxy[1][1]
+        self.dt[0]=dtc.cords[0].dt
+        self.dts[0] = datetime.datetime.fromtimestamp(self.dt[0])
+        self.dt[1]= dtc.cords[1].dt
+        self.dts[1] = datetime.datetime.fromtimestamp(self.dt[1])
+        self.yv0=dtc.cords[0].y
+        self.yv1=dtc.cords[1].y
         
         label0=QtWidgets.QLabel('Datetime 1: ')
         self.dte[0]=QtWidgets.QDateTimeEdit()
-        self.dte[0].setDateTime(self.dtxs[0])
+        self.dte[0].setDateTime(self.dts[0])
         self.dte[0].setDisplayFormat('dd.MM.yyyy hh:mm')
         self.layout.addWidget(label0,self.order,0)
         self.layout.addWidget(self.dte[0],self.order,1)
@@ -437,7 +432,7 @@ class DTrendLineDialog(uitools.DrawPropDialog):
 
         label2=QtWidgets.QLabel('Datetime 2: ')
         self.dte[1]=QtWidgets.QDateTimeEdit()
-        self.dte[1].setDateTime(self.dtxs[1])
+        self.dte[1].setDateTime(self.dts[1])
         self.dte[1].setDisplayFormat('dd.MM.yyyy hh:mm')
         self.layout.addWidget(label2,self.order,0)
         self.layout.addWidget(self.dte[1],self.order,1)
@@ -459,195 +454,809 @@ class DTrendLineDialog(uitools.DrawPropDialog):
             self.exec()
 
     @property
-    def dtxy(self):
-        return [[self.dtx[0],self.yv0],[self.dtx[1],self.yv1]]
+    def dtc(self):
+        return [[self.dt[0],None,self.yv0],[self.dt[1],None,self.yv1]]
 
     def setup_extension(self):
-        if 'extension' in self.item.props:
-            self.state_dict['extension']=self.__class__.extension=self.item.props['extension']
+        if 'raydir' in self.item.props:
+            self.state_dict['raydir']=self.__class__.raydir=self.item.props['raydir']
         
-
     def update_dt(self,i):
-        self.dtxs[i]=self.dte[i].dateTime()
-        self.dtx[i]=self.dtxs[i].toSecsSinceEpoch()
+        self.dts[i]=self.dte[i].dateTime()
+        self.dt[i]=self.dts[i].toSecsSinceEpoch()
     
     def update_item(self,**kwargs):
-        self.item.set_dt(self.dtxy)
+        try:
+            self.item.set_dtc(self.dtc)
+        except IndexError:
+            chtl.simple_message_box(title="Timeseries error", 
+                text="Timeseries data is unavailable.\nEnsure that the specified times are open market times.")
         return super().update_item(**kwargs)
 
-class DrawTrendLine(DrawItem,pg.LineSegmentROI):
+class DrawSegment(DrawItem,pg.LineSegmentROI):
     def __init__(self,plt,coords=chtl.zero2P(),dialog=DTrendLineDialog, **kwargs):
         super().__init__(plt,dialog=dialog,**kwargs)
         super(DrawItem,self).__init__(coords)
-        if 'extension' not in self.props:
-            self.props['extension']=cfg.RAYDIR['r']
-        self.initialisation()
+        self.config_item()
         pen=dict(width=self.width,color=self.color,style=cfg.LINESTYLES[self.style])
         self.setPen(**pen)
         self.hoverPen=pg.functions.mkPen(**pen)
         pen['style']=self.style
-        self.ray=InfiniteTrendLine(self.plt,self,extension=self.props['extension'],props=pen,persist=False)
-        self.plt.addItem(self.ray)
-
-        self.raying()
-
-        self.sigRegionChanged.connect(self.line_move)
+       
+        # self.sigRegionChanged.connect(self.line_move)
         self.plt.sigMouseOut.connect(self.magnetize)
-        self.ray.sigDragged.connect(self.ray_move)
 
-        self.context_menu=self.create_menu(ray_on=True,description='Trend Line')
-
-    def read_state(self):
-        return self.state['points']
-
-    def write_state(self):
-        self.state['points']=self.xy
+    @property
+    def rawdtc(self):
+        s=self.getState()
+        pos=dtPoint(None, *s['pos'])
+        p1=dtPoint(None, *s['points'][0])
+        p2=dtPoint(None, *s['points'][1])
+        dtc=dtCords([p1,p2])+pos
+        return dtc 
     
-    def set_props(self,props):
-        super().set_props(props)
-        if self.caller=='open_subw':
-            self.repaint_ray()
-        pen=dict(width=self.width,color=self.color,style=cfg.LINESTYLES[self.style])
-        self.ray.setPen(**pen)
-        self.ray.hoverPen=pg.functions.mkPen(**pen)
-        self.update_menu()
-                    
-    def raying(self):
-        xshift=self.state['pos'][0]
-        yshift=self.state['pos'][1]
-        x0=self.xy[0][0]+xshift
-        y0=self.xy[0][1]+yshift
-        x1=self.xy[1][0]+xshift
-        y1=self.xy[1][1]+yshift
-        ysign=1 if y1-y0>=0 else -1
-        ang= 90*ysign if x1-x0==0 else math.degrees(math.atan((y1-y0)/(x1-x0)))
-        self.ray.setPos([x0,y0])
-        self.ray.setAngle(ang)
-        self.ray.setPen(width=self.width,color=self.color,style=cfg.LINESTYLES[self.style])
+    def set_dtc(self,*args,**kwargs) -> bool:
+        update_pos=super().set_dtc(*args,**kwargs)
+        
+        if update_pos:
+            state=self.getState()
+            state['pos']=Point(0,0)
+            state['points']=self._dtc.get_raw_points()
+            self.setState(state)
 
-    def line_move(self):
-        self.state=self.getState()
-        self.xy=self.state['points']
-        if self.click_count<self.clicks: #to fix no-repaint on initialisation
-            self.repaint_ray()
-        else: #to reduce overhead in general use
-            self.raying()
+        return update_pos
+
+    def mouse_update(self):
+        if self.change:
+            self.set_dtc(self.rawdtc)
+            self.change=False
     
-    def ray_move(self):
-        self.state=self.getState()
-        rxy=self.ray.getPos()
-        lxy=self.state['points']
-        dx,dy=rxy[0]-lxy[0][0],rxy[1]-lxy[0][1]
-        lxy[0][0],lxy[0][1],lxy[1][0],lxy[1][1]=lxy[0][0]+dx,lxy[0][1]+dy,lxy[1][0]+dx,lxy[1][1]+dy
-        self.state['points']=lxy
-        self.state['pos']=[0,0]
-        self.xy=self.state['points']
-        self.xy_ticks_to_times()
-        self.setState(self.state)
-
     def right_clicked(self,ev):#full override is simpler
-        super().right_clicked(ev,tseries=self.timeseries,dtxy=self.dtxy)
-
-    def repaint_ray(self): #workaround for the failure to repaint after update()
-        self.plt.removeItem(self.ray)
-        del self.ray
-        self.ray=InfiniteTrendLine(self.plt,self,extension=self.props['extension'],persist=False)
-        self.ray.sigDragged.connect(self.ray_move)#reconnect the signal after the removal
-        self.plt.addItem(self.ray)
-        self.raying()
+        dtc=self.get_dtc()
+        super().right_clicked(ev,tseries=self.timeseries,dtc=dtc)
 
     def left_clicked(self,ev):
-        self.ray.setMovable(not self.translatable)
         super().left_clicked(ev)
+
+    # For use within shape() function, can be made @staticmethod if need be
+    # Sets a mouse interaction area of width b around a line with coordinates a1 and a2
+    def _shaper(self, p: QtGui.QPainterPath, a1,a2,b):
+        p.moveTo(a1+b)
+        p.lineTo(a2+b)
+        p.lineTo(a2-b)
+        p.lineTo(a1-b)
+        p.lineTo(a1+b)
+
+        return p
+
+class DrawTrendLine(DrawSegment):
+    def __init__(self, *args, ray=cfg.RAYDIR['r'], menu_name='Trend Line', clicks=2,**kwargs):
+        super().__init__(*args, ray=ray, menu_name=menu_name, clicks=clicks,**kwargs)
+        self._cached_pos=None
+        self._drawpoints=None
+        
+    def paint(self, p, *args):
+        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, self._antialias)
+        p.setPen(self.currentPen)
+        
+        # Get the endpoints of the line segment
+        h1 = self.endpoints[0].pos()
+        h2 = self.endpoints[1].pos()
+
+        top,bot=self.calculate_intersections(h1,h2)
+
+        self._drawpoints=self.ray_points(h1,h2,top,bot,self.raydir)
+
+        # Draw the line segm
+        # ent extended to the top and bottom axes
+        p.drawLine(*self._drawpoints)
+        
+    @staticmethod
+    def ray_points(h1, h2, top, bottom, ray) -> typing.List[Point]:
+        def remove_duplicates(pts):
+            res=[]
+            for p in pts:
+                if p not in res:
+                    res.append(p)
+            if len(res)==1:
+                res*=2
+            if len(res)!=2:
+                raise ValueError("Ray points error")     
+            
+            return res
+        
+        if ray is None or ray == cfg.RAYDIR['n']:
+            points= [h1, h2]
+        
+        elif ray == cfg.RAYDIR['b']:
+            points= [top, bottom]
+        
+        elif ray == cfg.RAYDIR['r']:
+            #Select 2nd and 4th elements
+            right_xlist=sorted([h1.x(), h2.x(), top.x(), bottom.x()])[1::2]            
+            points = [point for point in [h1, h2, top, bottom] if point.x() in right_xlist]
+            if len(points)>2:
+                points=remove_duplicates(points)
+        
+        elif ray == cfg.RAYDIR['l']:
+            #Select 1st and 3d elements
+            left_xlist=sorted([h1.x(), h2.x(), top.x(), bottom.x()])[::2]  
+            points = [point for point in [h1, h2, top, bottom] if point.x() in left_xlist]
+            if len(points)>2:
+                points=remove_duplicates(points)
+        
+        else:
+            raise ValueError(f"Invalid value for 'ray' argument. Must be one of: None or {cfg.RAYDIR.values()}.")
+        
+        return points
+
+    def calculate_intersections(self, h1, h2):
+        # Get the view rectangle
+        viewRect = self.viewRect()
+        top_left = viewRect.topLeft()
+        bottom_right = viewRect.bottomRight()
+
+        # Calculate the intersection points with the top and bottom axes
+        if (delta:=h2.y()-h1.y())==0:
+            top_intersection=Point(top_left.x(),h1.y())
+            bottom_intersection=Point(bottom_right.x(), h2.y())
+        else:
+            top_intersection = Point(h1.x() + (h2.x() - h1.x()) * (top_left.y() - h1.y()) / delta, top_left.y())
+            bottom_intersection = Point(h1.x() + (h2.x() - h1.x()) * (bottom_right.y() - h1.y()) / delta, bottom_right.y())
+
+        return top_intersection, bottom_intersection
     
-    def setZValue(self, z):
-        try:
-            self.ray.setZValue(z-1)
-        except Exception:
-            pass
-        return super().setZValue(z)
+    def boundingRect(self):
+        # Ensure viewRect cache clearance upon position change
+        # otherwise rendering breaks
+        pos=self.getState()['pos']
+        if pos!=self._cached_pos:
+            self._cached_pos=pos
+            self.viewTransformChanged()
 
+        return self.viewRect() # return self.shape().boundingRect()
+
+    # Similar to InfiniteLine, prevent infinite loop scrolls
+    def dataBounds(self, axis, frac=1.0, orthoRange=None):
+        if axis == 0:
+            return None   ## x axis should never be auto-scaled
+        else:
+            return (0,0)
+    
+    def shape(self):
+        p = QtGui.QPainterPath()
+    
+        # Ensure mouse interactions over the entire painted shape
+        h1 = self._drawpoints[0] if self._drawpoints else self.endpoints[0].pos()
+        h2 = self._drawpoints[1] if self._drawpoints else self.endpoints[1].pos()
+        dh = h2-h1
+        if dh.length() == 0:
+            return p
+        pxv = self.pixelVectors(dh)[1]
+        if pxv is None:
+            return p
+            
+        pxv *= 4
+        
+        p.moveTo(h1+pxv)
+        p.lineTo(h2+pxv)
+        p.lineTo(h2-pxv)
+        p.lineTo(h1-pxv)
+        p.lineTo(h1+pxv)
+      
+        return p
+    
+    def set_props(self, props)-> None:
+        super().set_props(props)
+        if self.raydir:
+            self.update_menu()
+
+class DrawTriPointItem(DrawTrendLine):
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,clicks=3,**kwargs)
+        self.addFreeHandle(self.endpoints[0].pos())
+    
+    @property
+    def rawdtc(self):
+        s=self.getState()
+        pos=dtPoint(None, *s['pos'])
+        cords=[dtPoint(None,*xy) for xy in s['points']]
+        if(len(cords))==2:
+            cords.append(cords[0])
+        assert len(cords)==3
+        dtc=dtCords(cords)+pos
+        return dtc
+    
+    # native override
+    def setState(self, state):
+        ROI.setState(self, state)
+        p1 = [state['points'][0][0]+state['pos'][0], state['points'][0][1]+state['pos'][1]]
+        p2 = [state['points'][1][0]+state['pos'][0], state['points'][1][1]+state['pos'][1]]
+        self.movePoint(self.getHandles()[0], p1, finish=False)
+        self.movePoint(self.getHandles()[1], p2, finish=False)
+        #overridden section
+        if len(self.getHandles())==3:
+            p3 = [state['points'][2][0]+state['pos'][0], state['points'][2][1]+state['pos'][1]]
+            self.movePoint(self.getHandles()[2], p3) 
+
+class DChannelDialog(DTrendLineDialog):
+    initials=dict(DTrendLineDialog.initials)
+    initials['anchor_dt']=anchor_dt=None
+    def __init__(self, *args, tseries=None,exec_on=False, dtc=dtCords.make(n=3).zero(), **kwargs):
+        super().__init__(*args, tseries=tseries,dtc=dtc,exec_on=False, **kwargs)
+        self.state_dict['anchor_dt']=self.__class__.anchor_dt
+        self.setup_extension()
+        self.dt.append(None)
+        self.dts.append(None)
+        self.dte.append(None)
+        self.dt[2]=dtc.cords[2].dt
+        self.dts[2] = datetime.datetime.fromtimestamp(self.dt[2])
+        self.yv2=dtc.cords[2].y
+
+        label0=QtWidgets.QLabel('Datetime 3: ')
+        self.dte[2]=QtWidgets.QDateTimeEdit()
+        self.dte[2].setDateTime(self.dts[2])
+        self.dte[2].setDisplayFormat('dd.MM.yyyy hh:mm')
+        self.layout.addWidget(label0,self.order,0)
+        self.layout.addWidget(self.dte[2],self.order,1)
+        self.dte[2].dateTimeChanged.connect(lambda *args: self.update_dt(2))
+
+        label1=QtWidgets.QLabel('Value 3: ')
+        pbox=QtWidgets.QDoubleSpinBox()
+        pbox.setDecimals(self.item.precision)
+        pbox.setSingleStep(pow(10,-self.item.precision))
+        pbox.setMaximum(self.yv2*100)
+        pbox.setValue(self.yv2)
+        self.layout.addWidget(label1,self.order,3)
+        self.layout.addWidget(pbox,self.order,4)
+        pbox.valueChanged.connect(lambda *args: setattr(self,'yv2',pbox.value()))
+        self.order+=1
+
+        if exec_on==True:
+            self.embedded_db()
+            self.exec()
+
+    @property
+    def dtc(self):
+         return [[self.dt[0],None,self.yv0],[self.dt[1],None,self.yv1],[self.dt[2],None,self.yv2]]
+
+    def update_item(self, **kwargs):
+        super().update_item(**kwargs)
+        
+class DChannelTabsDialog(uitools.TabsDialog):
+    def __init__(self,plt,item=None,**kwargs):
+        level_props=dict(desc_on=False,width=cfg.FIBOWIDTH,color=cfg.FIBOCOLOR,style=cfg.FIBOSTYLE)
+        #set default color of levels at the foreground color
+        level_props['color']=plt.graphicscolor
+        super().__init__(DChannelDialog,plt,item=item,level_props=level_props,**kwargs)
+
+
+class DrawChannel(DrawTriPointItem):
+    def __init__(self,*args,levels=None,**kwargs):
+        super().__init__(*args, dialog=DChannelTabsDialog, menu_name='Channel', **kwargs)
+        level_props=dict(width=cfg.FIBOWIDTH,color=cfg.FIBOCOLOR,style=cfg.FIBOSTYLE)
+        self.props['levels']=[]
+        for lvl in [50.0]:
+            self.props['levels'].append(dict(show=False,value=lvl,desc_on=False,removable=False,**level_props))
+        #set metaprops in newly created (not saved) object
+        if self.is_new and self.myref in self.mprops:
+            self.props=dict(self.mprops[self.myref])
+        #set default level (50.0) at foreground color
+        metalevels=self.mprops[self.myref]['levels'] if self.myref in self.mprops and 'levels' in self.mprops[self.myref] else None
+        if metalevels is None:
+            for lvl in self.props['levels']:
+                lvl['color']=self.plt.graphicscolor
+        if levels is not None:
+            self.props['levels']=levels
+        self.level_items=[]
+        if self.is_new==False: #used when sourced from saved state file
+            if metalevels is not None:
+                self.props['levels']=metalevels
+
+        self._drawpoints=[None,None]
+        
+    @property
+    def levels(self):
+        return self.props.get('levels',None)
+    
+    def paint(self,p,*args):
+        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, self._antialias)
+        p.setPen(self.currentPen)
+        
+        # Get the endpoints of the line segment
+        h1 = self.endpoints[0].pos()
+        h2 = self.endpoints[1].pos()
+
+        top,bot=self.calculate_intersections(h1,h2)
+
+        self._drawpoints[0]=self.ray_points(h1,h2,top,bot,self.raydir)
+        
+        # Calculate draw points of the channel parallel
+        h3 = self.endpoints[2].pos()
+        h4=h2+h3-h1
+        top,bot=self.calculate_intersections(h3,h4)
+        self._drawpoints[1]=self.ray_points(h3,h4,top,bot,self.raydir)
+    
+        # Draw the line segm
+        p.drawLine(*self._drawpoints[0])
+        
+        # Draw the parallel
+        p.drawLine(*self._drawpoints[1])
+
+        # Paint levels if they exist:
+        if self.levels:
+            for level in self.levels:
+                if level['show']:
+                    l1=self._drawpoints[0][0]+(self._drawpoints[1][0]-self._drawpoints[0][0])*(level['value']/100)
+                    l2=self._drawpoints[0][1]+(self._drawpoints[1][1]-self._drawpoints[0][1])*(level['value']/100)
+                    pen=pg.mkPen(color=level['color'],width=level['width'],style=cfg.LINESTYLES[level['style']])
+                    p.setPen(pen)
+                    p.drawLine(l1,l2)
+
+    def shape(self):
+        p = QtGui.QPainterPath()
+    
+        # Ensure mouse interactions over the entire painted shape
+        h1 = self._drawpoints[0][0] if self._drawpoints[0] else self.endpoints[0].pos()
+        h2 = self._drawpoints[0][1] if self._drawpoints[0] else self.endpoints[1].pos()
+        dh = h2-h1
+        if dh.length() == 0:
+            return p
+        pxv = self.pixelVectors(dh)[1]
+        if pxv is None:
+            return p
+            
+        pxv *= 4
+        
+        p=self._shaper(p,h1,h2,pxv)
+
+        # Add parallel to the shape to enable mouse interactions with the parallel
+        if self._drawpoints[1]:
+            h1=self._drawpoints[1][0]
+            h2=self._drawpoints[1][1]
+            p=self._shaper(p,h1,h2,pxv)
+
+        return p
+
+class DrawPitchfork(DrawTriPointItem):
+    def __init__(self, *args,**kwargs):
+        super().__init__(*args, ray=None, menu_name='Pitchfork',
+            dialog=lambda *args,**kwargs: DChannelDialog(*args,exec_on=True,**kwargs), 
+            **kwargs)
+        
+        self._drawpoints=[None,None,None]
+
+    def paint(self,p,*args):
+        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, self._antialias)
+        p.setPen(self.currentPen)
+        
+        # Get the endpoints of the line segment
+        h1 = self.endpoints[0].pos()
+        h2 = self.endpoints[1].pos()
+        h3 = self.endpoints[2].pos()
+
+        midpoint=h2+(h3-h2)/2
+        vector=midpoint-h1
+
+        top,bot=self.calculate_intersections(h2,h2+vector)
+        self._drawpoints[0]=self.ray_points(h2,h2+vector,top,bot,cfg.RAYDIR['r'])
+        
+        top,bot=self.calculate_intersections(h3,h3+vector)
+        self._drawpoints[1]=self.ray_points(h3,h3+vector,top,bot,cfg.RAYDIR['r'])
+    
+        # Extend the midpoint to the view edge
+        midpoint=self._drawpoints[0][1]+(self._drawpoints[1][1]-self._drawpoints[0][1])/2
+
+        # Draw sidelines
+        p.drawLine(*self._drawpoints[0])
+        p.drawLine(*self._drawpoints[1])
+        # Draw midline
+        p.drawLine(h1,midpoint)
+        self._drawpoints[2]=(h1,midpoint) # for reuse in shape
+    
+    def shape(self):
+        p = QtGui.QPainterPath()
+
+        # Ensure mouse interactions over the entire painted shape
+        h1 = self._drawpoints[0][0] if self._drawpoints[0] else self.endpoints[0].pos()
+        h2 = self._drawpoints[0][1] if self._drawpoints[0] else self.endpoints[1].pos()
+        dh = h2-h1
+        if dh.length() == 0:
+            return p
+        pxv = self.pixelVectors(dh)[1]
+        if pxv is None:
+            return p
+            
+        pxv *= 4
+        
+        p=self._shaper(p,h1,h2,pxv)
+
+        # Add the other parallel and midline to the shape to enable mouse interactions with them
+        if self._drawpoints[1]:
+            h1=self._drawpoints[1][0]
+            h2=self._drawpoints[1][1]
+            p=self._shaper(p,h1,h2,pxv)
+        # midline
+        if self._drawpoints[2]:
+            h1=self._drawpoints[2][0]
+            h2=self._drawpoints[2][1]
+            p=self._shaper(p,h1,h2,pxv)
+
+        return p
+
+class FiboDialog(DTrendLineDialog):
+    initials={'width': 1,'color': '#ff0000', 'style': cfg.DOTLINE}
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,exec_on=False,**kwargs)
+        self.__class__.initials['color']='red' #override
+        self.setup_extension()
+
+class FiboTabsDialog(uitools.TabsDialog):
+    level_props=dict(uitools.TabsDialog.level_props)
+    def __init__(self,plt,item=None,**kwargs):
+        level_props=dict(width=cfg.FIBOWIDTH,color=cfg.FIBOCOLOR,style=cfg.FIBOSTYLE)
+        #set default color of levels at the foreground color
+        level_props['color']=plt.graphicscolor
+        super().__init__(FiboDialog,plt,wname='Fibonacci retracements',item=item,
+            level_props=level_props,**kwargs)
+
+
+def fibo_factory(base=DrawSegment,dialog=FiboTabsDialog, menu_name='Fibo',
+                 preset_levels=(0.0,38.2,50.0,61.8,100.0)):
+
+    class _Fibo(base):
+        def __init__(self,*args,**kwargs):
+            super().__init__(*args, dialog=dialog, ray=cfg.RAYDIR['n'], menu_name=menu_name,
+                props=dict(width=cfg.FIBOLINEWIDTH,color=cfg.FIBOLINECOLOR,style=cfg.FIBOSTYLE),
+                **kwargs)
+
+            pen=dict(width=self.width,color=self.color,style=cfg.LINESTYLES[self.style])
+            self.setPen(**pen)
+            self.hoverPen=pg.functions.mkPen(**pen)#remove hover
+            level_props=dict(width=cfg.FIBOWIDTH,color=cfg.FIBOCOLOR,style=cfg.FIBOSTYLE)
+            self.props['levels']=[]
+            for lvl in preset_levels:
+                self.props['levels'].append(dict(show=True,value=lvl,desc=str(lvl),**level_props))
+            #set metaprops in newly created (not saved) object
+            if self.is_new and self.myref in self.mprops:
+                self.props=dict(self.mprops[self.myref])
+            #set default levels at the foreground color
+            metalevels=self.mprops[self.myref]['levels'] if self.myref in self.mprops and 'levels' in self.mprops[self.myref] else None
+            if metalevels is None:
+                for lvl in self.props['levels']:
+                    lvl['color']=self.plt.graphicscolor
+
+            self.update_menu() # ensure meta props ray persistence
+            
+            self._cached_pos=None
+            self.marks = [] #list of text labels of the the fibo levels
+            self.sigRegionChanged.connect(self.update_marks)
+            self.plt.vb.sigTransformChanged.connect(self.update_marks) # ensure correct pos init of marks on saved chart re-opening
+
+        @property
+        def levels(self):
+            return self.props.get('levels',None)
+        
+        def boundingRect(self):
+            # Ensure viewRect cache clearance upon position change
+            # otherwise rendering breaks
+            pos=self.getState()['pos']
+            if pos!=self._cached_pos:
+                self._cached_pos=pos
+                self.viewTransformChanged()
+
+            return self.viewRect() # return self.shape().boundingRect()
+
+        # Similar to InfiniteLine, prevent infinite loop scrolls
+        def dataBounds(self, axis, frac=1.0, orthoRange=None):
+            if axis == 0:
+                return None   ## x axis should never be auto-scaled
+            else:
+                return (0,0)
+
+        def paint(self, p, *args):
+            super().paint(p, *args)
+
+            p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, self._antialias)
+            p.setPen(self.currentPen)
+
+            self.paint_levels(p)
+
+        def paint_levels(self,p):
+            p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, self._antialias)
+            p.setPen(self.currentPen)
+
+            if self.levels:
+                for level in self.levels:
+                    if level['show']:
+                        l1,l2=self.get_level_values(level['value'])
+                        pen=pg.mkPen(color=level['color'],width=level['width'],style=cfg.LINESTYLES[level['style']])
+                        p.setPen(pen)
+                        p.drawLine(l1,l2)
+
+        def get_level_values(self,value):
+
+            rect=self.viewRect()
+            xleft=rect.topLeft().x()
+            xright=rect.bottomRight().x()
+            ray=self.raydir
+
+            h1=self.endpoints[0].pos()
+            h2=self.endpoints[1].pos()
+            dx=abs(h2.x()-h1.x())
+            xpos=min(h1.x(),h2.x())
+            dy=h1.y()-h2.y()
+            ypos=h2.y()
+
+            x0=xpos-dx/2 if ray==cfg.RAYDIR['r'] or ray==cfg.RAYDIR['n'] else xleft 
+            x1=xpos+3*dx if ray==cfg.RAYDIR['l'] or ray==cfg.RAYDIR['n'] else xright
+            y0=ypos+dy*value/100
+            y1=y0
+            
+            return Point(x0,y0),Point(x1,y1)
+        
+        def update_marks(self):
+            xright=self.viewRect().bottomRight().x()
+            pos=self.getState()['pos']
+
+            marks=self.marks.copy()
+            for level in self.levels:
+                for mark in marks:
+                    text=mark.toPlainText()
+                    if text==level['desc']:
+                        if level['show']:
+                            v=self.get_level_values(level['value'])
+                            markpos=Point(max(v[0].x(),min(v[1].x(),xright)),v[1].y())+pos
+                            mark.setPos(markpos)
+                        else:
+                            self.marks.remove(mark)
+                            self.plt.removeItem(mark)
+                        break
+                    # If the required mark is not found, set it up
+                else:
+                    if level['show']:
+                        v=self.get_level_values(level['value'])
+                        self.marks.append(mark:=pg.TextItem(text=level['desc'],color=level['color'],anchor=(1,0.75)))
+                        mark.setParent(self)
+                        mark.setScale(0.9)
+                        markpos=Point(max(v[0].x(),min(v[1].x(),xright)),v[1].y())+pos
+                        mark.setPos(markpos)
+                        self.plt.addItem(mark)
+
+        # Remove unused or hidden marks
+        def clear_marks(self):
+            marks=self.marks.copy()
+            for mark in marks:
+                for level in self.levels:
+                    if mark.toPlainText()==level['desc']:
+                        mark.setColor(level['color'])
+                        break
+                else:
+                    self.marks.remove(mark)
+
+        def set_props(self,props):
+            super().set_props(props)
+            self.update_menu()
+            self.update_marks()
+            self.clear_marks()
+
+        def removal(self):
+            for mark in self.marks:
+                self.plt.removeItem(mark)
+            return super().removal()
+    
+    return _Fibo
+
+_DrawFibo=fibo_factory()
+# Ensure that eval() works on re-opening of saved charts
+class DrawFibo(_DrawFibo):
+    pass
+
+class FiboExtDialog(DTrendLineDialog):
+    initials={'width': 1,'color': '#ff0000', 'style': cfg.DOTLINE}
+    def __init__(self,*args,exec_on=False,dtc=dtCords.make(n=3).zero(),wname=None,**kwargs):
+        super().__init__(*args,exec_on=False,dtc=dtc,**kwargs)
+        self.__class__.initials['color']='red' #override
+        self.setup_extension()
+        self.dt.append(None)
+        self.dts.append(None)
+        self.dte.append(None)
+        self.dt[2]=dtc.cords[2].dt
+        self.dts[2] = datetime.datetime.fromtimestamp(self.dt[2])
+        self.yv2=dtc.cords[2].y
+
+        label0=QtWidgets.QLabel('Datetime 3: ')
+        self.dte[2]=QtWidgets.QDateTimeEdit()
+        self.dte[2].setDateTime(self.dts[2])
+        self.dte[2].setDisplayFormat('dd.MM.yyyy hh:mm')
+        self.layout.addWidget(label0,self.order,0)
+        self.layout.addWidget(self.dte[2],self.order,1)
+        self.dte[2].dateTimeChanged.connect(lambda *args: self.update_dt(2))
+
+        label1=QtWidgets.QLabel('Value 3: ')
+        pbox=QtWidgets.QDoubleSpinBox()
+        pbox.setDecimals(self.item.precision)
+        pbox.setSingleStep(pow(10,-self.item.precision))
+        pbox.setMaximum(self.yv2*100)
+        pbox.setValue(self.yv2)
+        self.layout.addWidget(label1,self.order,3)
+        self.layout.addWidget(pbox,self.order,4)
+        pbox.valueChanged.connect(lambda *args: setattr(self,'yv2',pbox.value()))
+        self.order+=1
+
+        if exec_on:
+            self.setWindowTitle(wname)
+            self.embedded_db()
+            self.exec()
+
+    @property
+    def dtc(self):
+        return [[self.dt[0],self.yv0],[self.dt[1],self.yv1],[self.dt[2],self.yv2]]
+
+class FiboExtTabsDialog(uitools.TabsDialog):
+    levels_props=dict(uitools.TabsDialog.level_props)
+    def __init__(self,plt,item=None,**kwargs):
+        level_props=dict(width=cfg.FIBOWIDTH,color=cfg.FIBOCOLOR,style=cfg.FIBOSTYLE)
+        #set default color of levels at the foreground color
+        level_props['color']=plt.graphicscolor
+        super().__init__(FiboExtDialog,plt,wname='Fibonacci extensions',item=item,
+            level_props=level_props,**kwargs)
+
+
+_DrawFiboExt=fibo_factory(base=DrawTriPointItem,dialog=FiboExtTabsDialog, menu_name='Fibo Ext',
+        preset_levels=(61.8,100.0,161.8))
+
+class DrawFiboExt(_DrawFiboExt):
+    
+    def paint(self, p, *args):
+        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, self._antialias)
+        p.setPen(self.currentPen)
+
+        h1 = self.endpoints[0].pos()
+        h2 = self.endpoints[1].pos()
+        h3 = self.endpoints[2].pos()
+
+        p.drawLine(h1,h2)
+        p.drawLine(h2,h3)
+
+        self.paint_levels(p)
+
+    def get_level_values(self,value):
+
+            rect=self.viewRect()
+            xleft=rect.topLeft().x()
+            xright=rect.bottomRight().x()
+            ray=self.raydir
+
+            h1=self.endpoints[0].pos()
+            h2=self.endpoints[1].pos()
+            h3=self.endpoints[2].pos()
+            if h3==h1: h3=h2 # fixing animation on initial setup by mouse-clicks
+            
+            dx=abs(h3.x()-h1.x())
+            xpos=h3.x()
+            dy=h2.y()-h1.y()
+            ypos=h3.y()
+
+            x0=xpos-dx if ray==cfg.RAYDIR['r'] or ray==cfg.RAYDIR['n'] else xleft 
+            x1=xpos+2*dx if ray==cfg.RAYDIR['l'] or ray==cfg.RAYDIR['n'] else xright
+            y0=ypos+dy*value/100
+            y1=y0
+            
+            return Point(x0,y0),Point(x1,y1)
+    
+    def shape(self):
+        p = QtGui.QPainterPath()
+    
+        h1 = self.endpoints[0].pos()
+        h2 = self.endpoints[1].pos()
+        h3 = self.endpoints[2].pos()
+        dh = h2-h1
+        if dh.length() == 0:
+            return p
+        pxv = self.pixelVectors(dh)[1]
+        if pxv is None:
+            return p
+            
+        pxv *= 4
+        
+        p=self._shaper(p,h1,h2,pxv)
+        p=self._shaper(p,h2,h3,pxv)
+
+        return p
+
+class DrawRuler(DrawSegment):
+    def __init__(self, *args,**kwargs):
+        super().__init__(*args, menu_name='Ruler', **kwargs)
+        super().set_props(dict(color='r'))
+        self.tag=pg.TextItem(text="Text",color='r',anchor=(0.5,1))
+        self.plt.addItem(self.tag)
+
+        self.sigRegionChanged.connect(self.ruler_tag)
+        self.plt.vb.sigStateChanged.connect(self.ruler_tag)
+        self.plt.vb.sigTransformChanged.connect(self.ruler_tag)
+
+    def ruler_tag(self):
+        state=self.getState()
+        pos=state['pos']
+        points=state['points']
+        delta=points[1]-points[0]
+        self.tag.setPos(pos+points[1])
+        bars=int(delta[0]//self.timeseries.timeframe)
+        pips=(delta[1])*chtl.to_pips(self.timeseries.symbol)
+        self.tag.setText(f"Pips: {pips:.1f}\nBars: {str(bars)}")
+    
+    def set_props(self,props):
+        if 'color' in props:
+            self.tag.setColor(props['color'])
+        return super().set_props(props)
+    
     def removal(self):
-        self.plt.removeItem(self.ray)
-        super().removal()
+        self.plt.removeItem(self.tag)
+        return super().removal()
 
-class DrawEllipse(DrawItem,pg.EllipseROI):
+# Draws items whose position is defined by pos and size
+class DrawSimpleItem(DrawItem):
     def __init__(self,plt,coords=chtl.zero2P(),**kwargs):
         pos=coords[0]
         size=[coords[1][0]-coords[0][0],coords[1][1]-coords[0][1]]
         super().__init__(plt,dialog=uitools.DrawPropDialog,**kwargs)
         super(DrawItem,self).__init__(pos,size)
-        self.initialisation()
-        self.setPen(width=self.width,color=self.color,style=cfg.LINESTYLES[self.style])
+        self.config_item()
+        pen=dict(width=self.width,color=self.color,style=cfg.LINESTYLES[self.style])
+        self.setPen(**pen)
+        self.hoverPen=pg.functions.mkPen(**pen)
 
-    def read_state(self):
-        xy=[]
-        xy.append(self.state['pos'])
-        xy.append(self.state['size'])
-        return xy
-    
-    def write_state(self):
-        self.state['pos']=self.xy[0]
-        self.state['size']=[self.xy[1][0]-self.xy[0][0],self.xy[1][1]-self.xy[0][1]]
-    
+    @property
+    def rawdtc(self):
+        s=self.getState()
+        pos=dtPoint(None, *s['pos'])
+        size=dtPoint(None, *s['size'])
+        return dtCords([pos,pos+size])
+
+    def set_dtc(self, *args,**kwargs):
+        update_pos=super().set_dtc(*args,**kwargs)
+        if update_pos:
+            self.setPos(self._dtc.get_pos())
+            self.setSize(self._dtc.get_size())
+        
+        return update_pos
+
     def right_clicked(self, ev,**kwargs):
         return super().right_clicked(ev,exec_on=True,**kwargs)
     
+    def ts_change(self,ts):
+        self.timeseries=ts
+        self.set_dtc(dtPoint(ts=ts))
+    
     def mouse_update(self):#override over segment rois
         if self.change:
-            self.state=self.getState()
-            self.xy=self.read_state()
-            self.xy[1]=self.xy[0]+self.xy[1]
-            self.xy_ticks_to_times()
+            self.set_dtc(self.rawdtc)
             self.change=False
+
+class DrawRectangle(DrawSimpleItem,pg.RectROI):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, menu_name='Rectangle', **kwargs)    
+
+class DrawEllipse(DrawSimpleItem,pg.EllipseROI):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, menu_name='Ellipse', **kwargs) 
     
     def save_props(self):
         a=super().save_props()
         a['angle']=self.getState()['angle']
         return a
     
-    def set_props(self, props):
-        try:
-            angle=props.pop('angle')
-            self.setAngle(angle)
-        except Exception:
-            pass
+    def set_props(self, props):   
+        if 'angle' in props:
+            self.setAngle(props.pop('angle'))
         return super().set_props(props)
 
-class DrawRectangle(DrawItem,pg.RectROI):
-    def __init__(self,plt,coords=chtl.zero2P(),**kwargs):
-        pos=coords[0]
-        size=[coords[1][0]-coords[0][0],coords[1][1]-coords[0][1]]
-        super().__init__(plt,dialog=uitools.DrawPropDialog,**kwargs)
-        super(DrawItem,self).__init__(pos,size,sideScalers=True)
-        self.initialisation()
-        self.setPen(width=self.width,color=self.color,style=cfg.LINESTYLES[self.style])
-    
-    def read_state(self):
-        xy=[]
-        xy.append(self.state['pos'])
-        xy.append(self.state['size'])
-        return xy
-    
-    def write_state(self):
-        self.state['pos']=self.xy[0]
-        self.state['size']=[self.xy[1][0]-self.xy[0][0],self.xy[1][1]-self.xy[0][1]]
-    
-    def right_clicked(self, ev,**kwargs):
-        return super().right_clicked(ev,exec_on=True,**kwargs)
-    
-    def mouse_update(self):#override over segment rois
-        if self.change:
-            self.state=self.getState()
-            self.xy=self.read_state()
-            self.xy[1]=self.xy[0]+self.xy[1]
-            self.xy_ticks_to_times()
-            self.change=False
-
+# InfiniteLine generic abstract class
 class AltInfiniteLine(DrawProps,pg.InfiniteLine):
     def __init__(self,plt,*args,dockplt=None,dialog=uitools.DrawPropDialog,
         props=None,caller=None,**kwargs):
-        super().INIT(plt.mwindow,props=props,caller=caller)
+        super().config_props(plt.mwindow,props=props,caller=caller)
         super(DrawProps,self).__init__(*args,**kwargs)
         self.plt=plt if dockplt is None else dockplt
         self.color=self.plt.chartprops[cfg.foreground] if self.color is None else self.color
@@ -656,9 +1265,9 @@ class AltInfiniteLine(DrawProps,pg.InfiniteLine):
         self.hoverPen=pg.functions.mkPen(**pen)
         self.precision=self.plt.precision
         self.timeseries=plt.chartitem.timeseries
-        self.dtx=0.0
+        self._dtp=dtPoint(ts=self.timeseries) # positional data object with dt attribute cached
         self.dialog=dialog
-        self.extension=None if 'extension' not in self.props else self.props['extension']
+        self.raydir=self.props.get('raydir',None) 
         self.context_menu=self.create_menu()
 
         self.sigDragged.connect(self.mouse_dragged)
@@ -682,48 +1291,71 @@ class AltInfiniteLine(DrawProps,pg.InfiniteLine):
             self.setMovable(False)
             self.clearMarkers()
 
+    def mouse_update(self):
+        raise NotImplementedError("mouse_update is not implemented")
+
     def mouse_dragged(self):
         try:
             self.mouse_update()
         except Exception:
             pass
     
-    def save_dt(self):
-        # int() to ensure JSON serializability
-        return int(self.dtx)
+    def get_dtc(self):
+        '''
+        Function serves as the single point of getting coordinates.
+        Function returns dt and pos as a tuple
+        '''
+        c=dtPoint(None,*self.getPos()).fillnone(self._dtp) # sets dt from self._dtp instead of None
+        
+        return c
+
+    def save_dtc(self):
+        '''
+        Function transforms get_dtc() into a JSON representation
+        to save to disk
+        '''
+        
+        return self.get_dtc().rollout()
     
-    def set_dt(self,dtx):
-        self.dtx=dtx
-    
-    def paint(self, p, *args):#override of the parent function
-        if self.extension==cfg.RAYDIR['n']: 
-            pass #no paint if neither direction
-        else:
-            if self.extension==cfg.RAYDIR['r']:
-                rgt=self._endPoints[1]
-                del self._endPoints
-                self._endPoints=(0,rgt)
-            elif self.extension==cfg.RAYDIR['l']:
-                lft=self._endPoints[0]
-                del self._endPoints
-                self._endPoints=(lft,0)
-            elif self.extension==cfg.RAYDIR['b'] or self.extension is None:
-                pass
-            else:
-                uitools.simple_message_box(text='Unrecognized ray direction',
-                    icon=QtWidgets.QMessageBox.Warning)
-                #print(f'{self.extension} Unrecognized ray direction')
-            super().paint(p, *args)
+    def set_dtc(self, dtpos, force=False) -> bool:
+        '''
+        Function serves as the single unified point of setting coordinates.
+        Function accepts dtx and *pos as an unpacked tuple argument,
+        and processes them depending on the number of args elements given.
+        - sets position based on dtx of 1 or 3 pos args are given
+        - sets dtx based on pos if 2 pos args are given
+        - refreshes pos based on dtx where no args are given, eg. at timeseries change
+        - processes JSON based saved data to restore position
+        
+        kwargs:
+        - force: forces update of real position even where only raw coordinates (getPos()) are given.
+        Default: False, to avoid updating real position where it is updated externally, eg. in __init__ or
+        mouse_update().  Only attributes are updated and not the real position if only raw coordinates
+        are given and force is False.
+
+        Returns True if the real position is updated and False otherwise
+        ''' 
+        c=dtpos if type(dtpos) == dtPoint else dtPoint(*dtpos)
+            
+        self._dtp=self._dtp.apply(c) #update dtc
+
+        # dont setPos solely based on getPos coords unless explicitly forced
+        # to avoid idle setPos eg. on mouse_updates
+        update_pos=(c.dt is not None or c.ts is not None) or force
+        if update_pos:  
+            self.setPos([self._dtp.x,self._dtp.y])
+
+        return update_pos
     
     def mouse_area(self,x):
         x0=self.getPos()[0]
-        if self.extension==cfg.RAYDIR['n']:
+        if self.raydir==cfg.RAYDIR['n']:
             return False
-        elif self.extension==cfg.RAYDIR['r']:
+        elif self.raydir==cfg.RAYDIR['r']:
             return True if x>=x0 else False
-        elif self.extension==cfg.RAYDIR['l']:
+        elif self.raydir==cfg.RAYDIR['l']:
             return True if x<=x0 else False
-        elif self.extension==cfg.RAYDIR['b']:
+        elif self.raydir==cfg.RAYDIR['b']:
             return True
         else:
             return True
@@ -735,16 +1367,6 @@ class AltInfiniteLine(DrawProps,pg.InfiniteLine):
     def xvalue(self,y):
         x0,y0=self.getPos()
         return x0 if self.angle==0 else x0+(y-y0)/math.tan(math.radians(self.angle))
-
-    #to monitor mouse hover distance/no longer used as the bug was fixed but retained just in case
-    def in_vicinity(self,xy,dst=cfg.VICINITY_DISTANCE):
-        pixy=self.mapToDevice(xy)
-        p_x=self.mapToDevice(Point(self.xvalue(xy.y()),xy.y()))
-        p_y=self.mapToDevice(Point(xy.x(),self.yvalue(xy.x())))
-        dx=abs(pixy.x()-p_x.x())
-        dy=abs(pixy.y()-p_y.y())
-        res = True if dx<dst or dy<dst else False
-        return res
 
     def create_menu(self,description=None):
         context_menu=QtWidgets.QMenu()
@@ -772,53 +1394,38 @@ class AltInfiniteLine(DrawProps,pg.InfiniteLine):
             zv=self.zValue()
             self.setZValue(zv+1)
 
-    def magnetize(self): 
-        if self.movable:
-            props=self.plt.mwindow.props
-            yes=props['magnet']
-            mapper=lambda x: self.mapFromDevice(x)
-            mp0=mapper(Point(0,0))
-            if yes and mp0 is not None:
-                df=self.timeseries.data
-                ticks=self.timeseries.ticks
+    def magnetize(self) -> dtPoint|None:
 
-                pts=self.getState()
-                
-                vect=mapper(Point(cfg.MAGNET_DISTANCE,cfg.MAGNET_DISTANCE))-mp0
-                vect=Point(abs(vect.x()),abs(vect.y()))
-                diff=np.abs(ticks-pts[0])#initialize minimum x axis distance from the base point
-                closest_index=np.argmin(diff)
-                                    
-                if diff[closest_index]<vect.x():
-                    magbar=df.iloc[closest_index] #magnetized bar
-                    prices=magbar.loc['o':'c'].to_numpy()
-                    diff=np.abs(prices-pts[1])
-                    closest_price=np.argmin(diff) 
-                    if diff[closest_price]<vect.y():
-                        xy=Point(ticks[closest_index],prices[closest_price])
-                        self.setState(xy)
-                        return xy
+        if not self.movable or not self.plt.mwindow.props['magnet']:
+            return None
+        
+        mapper=lambda x: self.mapFromDevice(x)
+        mp0=mapper(Point(0,0))
+        if mp0 is None:
+            return None
+        
+        df=self.timeseries.data
+        ticks=self.timeseries.ticks
+
+        pts=self.getPos()
+        
+        vect=mapper(Point(cfg.MAGNET_DISTANCE,cfg.MAGNET_DISTANCE))-mp0
+        vect=Point(abs(vect.x()),abs(vect.y()))
+        diff=np.abs(ticks-pts[0])#initialize minimum x axis distance from the base point
+        closest_index=np.argmin(diff)
+        if diff[closest_index]<vect.x():
+            magbar=df.iloc[closest_index] #magnetized bar
+            prices=magbar.loc['o':'c'].to_numpy()
+            diff=np.abs(prices-pts[1])
+            closest_price=np.argmin(diff) 
+            if diff[closest_price]<vect.y():
+                xy=dtPoint(None,int(ticks[closest_index]),prices[closest_price])
+                self.set_dtc(xy,force=True)
+                return xy
         return None #if xy is not returned, return None
 
     def removal(self):
         self.plt.removeItem(self)
-
-class InfiniteTrendLine(AltInfiniteLine): #Subclass tailored to DrawTrendLine as attachment of it
-    def __init__(self,plt,parent_segment,*args,extension=cfg.RAYDIR['r'],persist=True,**kwargs) -> None:
-        super().__init__(plt,*args,**kwargs)
-        self.is_persistent=persist
-        self.setParent(parent_segment)
-        self.left_clicked=self.parent().left_clicked #def left-clicked function
-        self.extension=extension
-        pen=dict(width=self.width,color=self.color,style=cfg.LINESTYLES[self.style])
-        self.hoverPen=pg.functions.mkPen(**pen)
-        self.setZValue(self.parent().zValue()-1)
-
-    def getState(self):
-            pass
-
-    def right_clicked(self,ev):
-        return self.parent().right_clicked(ev)
 
 class DVLineDialog(uitools.DrawPropDialog):
     initials=dict(uitools.DrawPropDialog.initials)
@@ -847,61 +1454,54 @@ class DVLineDialog(uitools.DrawPropDialog):
         self.dtx=self.dtxs.toSecsSinceEpoch()
     
     def update_item(self,**kwargs):
-        self.item.set_dt(self.dtx)
-        self.item.setState([chtl.times_to_ticks(self.tseries,self.dtx),0])
+        self.item.set_dtc(dtPoint(self.dtx))
         return super().update_item(**kwargs)
+    
+    def reset_defaults(self):
+        super().reset_defaults()
+        self.__class__.color = self.item.plt.foregroundcolor
+        self.set_values()
 
 class DrawVerLine(AltInfiniteLine):
     def __init__(self,plt,pos=[0,0],dialog=DVLineDialog,**kwargs):
         super().__init__(plt,pos,angle=90,dialog=dialog,**kwargs)
-        self.state=self.getState()
-        self.dtx =chtl.ticks_to_times(self.timeseries,self.state[0])
         self.context_menu=self.create_menu(description='Vertical Line')
 
         self.ay=self.plt.getAxis('right')
         self.textX = pg.TextItem(anchor=(0,1))
         self.textX.setParent(self)
-        self.textX.setColor(self.plt.graphicscolor)
+        self.textX.setColor(self.color)
+        self.set_dtc(self.get_dtc())
         self.refresh()
         self.plt.addItem(self.textX, ignoreBounds=True)
 
         self.plt.vb.sigStateChanged.connect(self.refresh)
         self.plt.subwindow.plt.sigTimeseriesChanged.connect(self.ts_change)
- 
-    def getState(self):
-        return self.getPos()
-    
-    def setState(self,xy): 
-        self.p=[0,0] #fix bug blocking redrawing, self.p is an pg.InfiniteLine variable
-        self.setPos(xy)
-        self.refresh()
 
-    def saveState(self): #standard function override
-        return self.getState()
-    
-    def mouse_update(self):
-        self.dtx=chtl.ticks_to_times(self.timeseries,self.getPos()[0])
+    def set_dtc(self, *args,**kwargs):
+        r=super().set_dtc(*args,**kwargs)
         self.refresh()
+        return r
+
+    def mouse_update(self):
+        self.set_dtc(dtPoint(None,*self.getPos()))
 
     def ts_change(self,ts):
         self.timeseries=ts
-        self.redraw()
+        self.set_dtc(dtPoint(ts=ts))
 
-    def redraw(self):
-        self.state[0]=chtl.times_to_ticks(self.timeseries,self.dtx)
-        self.setState(self.state)
-        self.refresh()
-    
-    def refresh(self):
-        x=self.getPos()[0]
-        dtx=chtl.ticks_to_times(self.timeseries,x)
+    # Refreshes the vertical line's text label.
+    def refresh(self)-> None:
         ts=self.timeseries
         tf=ts.timeframe
-        dtx = datetime.datetime.fromtimestamp(dtx)
+
+        # get candle datetime in the current timeframe:
+        # raw coords dpPoint applied to an empty dtPoint with the current timeseries
+        c=dtPoint(ts=ts).apply(dtPoint(None,*self.getPos()))
+        dtx = datetime.datetime.fromtimestamp(c.dt)
        
-        self.setPos(x)
         y0=self.ay.range[0]    
-        self.textX.setPos(x,y0)
+        self.textX.setPos(c.x,y0)
 
         if tf>=cfg.PERIOD_D1:
             self.textX.setText(dtx.strftime("%d %b'%y"))
@@ -910,24 +1510,23 @@ class DrawVerLine(AltInfiniteLine):
             self.textX.setText(dtx.strftime("%d %b'%y %H:%M"))
             self.textX.setFontSize(cfg.D_FONTSIZE)
     
-    def set_dt(self, dtx):
-        super().set_dt(dtx)
-        self.redraw()
-
-    def removal (self):
-        self.plt.removeItem(self.textX)
-        # del self.textX
-        super().removal()
+    def set_props(self, props):
+        super().set_props(props)
+        self.textX.setColor(self.color)
     
     def right_clicked(self,ev):
-        super().right_clicked(ev,tseries=self.timeseries,dtxval=self.dtx)
+        super().right_clicked(ev,tseries=self.timeseries,dtxval=self.get_dtc().dt)
+    
+    def removal (self):
+        self.plt.removeItem(self.textX)
+        super().removal()
 
 class DHLineDialog(DVLineDialog):
     initials=dict(DVLineDialog.initials)
     def __init__(self, *args, yval=0.0, **kwargs):
         super().__init__(*args, exec_on=False,**kwargs)
         self.setWindowTitle('Horizontal Line')
-        self.state_dict['extension']=self.__class__.extension=self.item.extension
+        self.state_dict['raydir']=self.__class__.raydir=self.item.raydir
         self.yv=yval
 
         label=QtWidgets.QLabel('Value: ')
@@ -945,20 +1544,22 @@ class DHLineDialog(DVLineDialog):
         self.exec()
 
     def update_item(self,**kwargs):
-        self.item.set_dt([self.dtx,self.yv])
+        self.item.set_dtc(dtPoint(self.dtx,None,self.yv))
         return super(DVLineDialog,self).update_item(**kwargs) #equivalent to AltInfiniteLine.update_item()
 
 class DrawHorLine(AltInfiniteLine):
     def __init__(self,plt,pos=[0,0],dialog=DHLineDialog,**kwargs):
         super().__init__(plt,pos,angle=0,dialog=dialog,**kwargs)
-        self.state=list(pos)
-        self.dtx=chtl.ticks_to_times(self.timeseries,self.state[0])
         self.target=None
 
         self.ax=self.plt.getAxis('bottom')
         self.textY = pg.TextItem(anchor=(1,0.75))
         self.textY.setParent(self)
-        self.textY.setColor(self.plt.graphicscolor)
+        self.textY.setColor(self.color)
+        self.textY.setFontSize(cfg.D_FONTSIZE)  
+
+        # not required as init_magnetize happens to initialize self._dtp, but leave for reliability:
+        self.set_dtc(self.get_dtc()) 
         self.refresh()
         self.movable=True
         self.plt.addItem(self.textY, ignoreBounds=True)
@@ -968,90 +1569,52 @@ class DrawHorLine(AltInfiniteLine):
         if self.caller!='open_subw': #fast way to magnetize on initiation
             self.plt.sigMouseOut.connect(self.init_magnetize) 
 
-    @property
-    def extension(self):
-        if 'extension' in self.props:
-            return self.props['extension']
-        else:
-            return None
-    
-    @extension.setter
-    def extension(self,x):
-        self.props['extension']=x
+    def set_dtc(self, *args,**kwargs):
+        r=super().set_dtc(*args, **kwargs)
+        self.refresh()
+        return r
 
     def init_magnetize(self):
         self.mouse_update()
         self.plt.sigMouseOut.disconnect(self.init_magnetize)
     
-    def getState(self): #standard function override to avoid bloat in DrawItem
-        return self.getPos()
-    
-    def setState(self,xy): #standard function override to avoid bloat in AltInfiniteLine
-        self.p=[0,0] #fix bug blocking redraw, self.p is an pg.InfiniteLine variable
-        self.state=xy
-        self.setPos(xy)
-        self.refresh()
-
-    def saveState(self): #standard function override
-        return self.state
-
     def mouse_update(self):
-        try:
-            self.state=self.magnetize()
-            if self.state is None:
-                self.state=[self.plt.mapped_xy[0],self.getPos()[1]]
-        except Exception:
-            pass
-
-        try:
-            self.target.setPos(*self.state) #to avoid y-axis de-synch with the line
-        except Exception:
+        
+        dtpos=self.magnetize()
+        if dtpos is None:
+            self.set_dtc(dtPoint(None,self.plt.mapped_xy[0],self.get_dtc().y))
+        
+        if self.target is not None:
+            self.target.setPos(self.getPos()) #to avoid y-axis de-synch with the line
+        else:
             self.set_target()
-
-        self.dtx=chtl.ticks_to_times(self.timeseries,self.state[0])
-        self.refresh()
 
     def ts_change(self,ts):
         self.timeseries=ts
-        self.redraw()
-
-    def redraw(self): #no need to do transformations on price axis
         self.ax=self.plt.getAxis('bottom') #update axis on timeframe change
-        self.state[0]=chtl.times_to_ticks(self.timeseries,self.dtx)
-        self.setState(self.state)
-        self.refresh()
+        self.set_dtc(dtPoint(ts=ts))
 
+    # Refreshes the horizontal line's text label and target item.
     def refresh(self):
+        c=self.get_dtc()
         if self.target is not None:
-            self.target.setPos(*self.state)
+            self.target.setPos(c.x,c.y)
         else:
             self.set_target()
-        y=self.getPos()[1]
         x1=self.ax.range[1]
-        self.textY.setPos(x1,y)
-        self.textY.setText("{:.{pr}f}".format(y,pr=self.precision))
-        self.textY.setFontSize(cfg.D_FONTSIZE)  
+        self.textY.setPos(x1,c.y)
+        self.textY.setText(f"{c.y:.{self.precision}f}")
     
     def set_target(self):
         clr=self.color
         self.target=TargetItem(movable=False,symbol='o',size=3,pen=clr,hoverPen=clr)
         self.target.setParent(self)
-        self.target.setPos(*self.state)
+        self.target.setPos(*self.getPos())
         self.plt.addItem(self.target, ignoreBounds=True)
-    
-    def save_dt(self):
-        pos=self.getPos()
-        # int() to ensure JSON serializability
-        return [int(self.dtx),pos[1]]
-    
-    def set_dt(self, dtxy):
-        self.dtx=dtxy[0]
-        self.state[1]=dtxy[1]
-        self.redraw()
-    
+        
     def create_menu(self):
         context_menu=super().create_menu(description='Horizontal Line')
-        self.extension=cfg.RAYDIR['b'] if self.extension is None else self.extension
+        self.raydir=cfg.RAYDIR['b'] if self.raydir is None else self.raydir
         self.ray_act=QtGui.QAction('Ray')
         self.ray_act.setCheckable(True)
         context_menu.insertAction(self.prop_act,self.ray_act)
@@ -1063,129 +1626,172 @@ class DrawHorLine(AltInfiniteLine):
             return super().left_clicked(ev)
 
     def right_clicked(self, ev,**kwargs):
-        self.ray_act.setChecked(True if self.extension==cfg.RAYDIR['r'] else False)
-        super().right_clicked(ev,tseries=self.timeseries,dtxval=self.dtx,
-            yval=self.state[1],**kwargs)
+        c=self.get_dtc()
+        self.ray_act.setChecked(True if self.raydir==cfg.RAYDIR['r'] else False)
+        super().right_clicked(ev,tseries=self.timeseries,dtxval=c.dt,
+            yval=c.y,**kwargs)
         if self.maction == self.ray_act:
-            if self.extension!=cfg.RAYDIR['r']:
-                self.extension=cfg.RAYDIR['r']
+            if self.raydir!=cfg.RAYDIR['r']:
+                self.raydir=cfg.RAYDIR['r']
                 self.set_props(self.props)
             else:
-                self.extension=cfg.RAYDIR['b']
+                self.raydir=cfg.RAYDIR['b']
                 self.set_props(self.props)
-        self.plt.vb.update()
-        self.redraw()
     
     def get_props(self):
         a=super().get_props()
-        a['extension']=self.extension
+        a['raydir']=self.raydir
         return a
     
     def set_props(self,props):
         super().set_props(props)
-        self.extension=props['extension']
+        self.target.setPen(self.color)
+        self.target.setHoverPen(self.color)
+        self.textY.setColor(self.color)
+        self.raydir=props.get('raydir',cfg.RAYDIR['b'])
+
+    def paint(self, p, *args):#override of the parent function
+        if self.raydir is None:
+            return super().paint(p, *args) #ordinary paint if no raydir is used
+        
+        if self.raydir==cfg.RAYDIR['n']: 
+            return #no paint if neither direction
+        
+        if self.raydir==cfg.RAYDIR['r']:
+            rgt=self._endPoints[1]
+            self._endPoints=(0,rgt)
+
+        elif self.raydir==cfg.RAYDIR['l']:
+            lft=self._endPoints[0]
+            self._endPoints=(lft,0)
+
+        elif self.raydir==cfg.RAYDIR['b']:
+            if not (self._endPoints[0] and self._endPoints[1]): #check whether any endpoint is 0
+                self._computeBoundingRect() #if so, reset self._endPoints
+        else:
+            uitools.simple_message_box(text='Unrecognized ray direction',
+                icon=QtWidgets.QMessageBox.Warning)
+            #print(f'{self.raydir} Unrecognized ray direction')
+        
+        return super().paint(p, *args)
 
     def removal(self):
         self.plt.removeItem(self.textY)
         self.plt.removeItem(self.target)
         super().removal()
 
-class AltPolyLine(pg.PolyLineROI): #abstract class to ensure mouse interactions via segments 
-    def __init__(self,coords=chtl.zero2P()):
-        super().__init__(coords)
-        self.selected=True
-    
-    def addSegment(self, h1, h2, index=None):
-        super().addSegment(h1, h2, index=index)
-        self.segments[-1].setAcceptedMouseButtons(QtCore.Qt.MouseButton.LeftButton | QtCore.Qt.MouseButton.RightButton)
-        self.segments[-1].is_draw=True
 
-    def segmentClicked(self, segment, ev=None, pos=None):
-        if ev.button()==QtCore.Qt.MouseButton.LeftButton:
-            self.left_clicked(ev)
-        elif ev.button()==QtCore.Qt.MouseButton.RightButton:
-            self.right_clicked(ev)
-
-    def setSelected(self, s):
-        self.selected=s
-        return super().setSelected(s)
-
-    def hoverEvent(self, ev):
-        pass
-
-    def mouseClickEvent(self, ev):
-        pass
-
-    def left_clicked(self,ev):
-        self.translatable=not self.translatable
-        self.setSelected(self.translatable)
-
-    def right_clicked(self,ev):
-        pass
-
-    def read_state(self):
-        return self.state['points']
-
-    def write_state(self):
-        self.state['points']=self.xy
-
-class DrawPolyLine(DrawItem,AltPolyLine):
-    def __init__(self,plt,coords=chtl.zero2P(),clicks=None,**kwargs):
-        dlg=lambda *args,**kwargs: uitools.DrawPropDialog(*args,exec_on=True,**kwargs)
-        super().__init__(plt,dialog=dlg,clicks=clicks,**kwargs)
-        super(DrawItem,self).__init__(coords)
-        self.initialisation()
-        self.setPen(width=self.width,color=self.color,style=cfg.LINESTYLES[self.style])
-        self.clicks=clicks
-        self.is_draw=False #to exclude the body of the roi from valid selectable areas and leave only the segments as such areas
-        self.context_menu=self.create_menu(description='Polyline')
-
+class DrawPolyLine(DrawSegment):
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args, menu_name="Polyline", clicks=None,
+                         dialog=lambda *a,**k: uitools.DrawPropDialog(*a,exec_on=True,**k), 
+                         **kwargs)
         if self.is_new:
             self.plt.scene().sigMouseClicked.connect(self.completion)
-    
+
+    @property
+    def rawdtc(self):
+        s=self.getState()
+        pos=dtPoint(None, *s['pos'])
+        cords=[dtPoint(None,*xy) for xy in s['points']]
+        dtc=dtCords(cords)+pos
+        return dtc
+
     def completion(self,ev):
         if ev.button()==QtCore.Qt.MouseButton.RightButton:
-            self.write_state()
-            self.setState(self.state)
-            self.xy_ticks_to_times()
+            self.set_dtc(self.rawdtc) # refresh dt coordinates
             self.plt.scene().sigMouseClicked.disconnect(self.setup_mouseclicks)
             self.plt.scene().sigMouseMoved.disconnect(self.setup_mousemoves)
             self.plt.scene().sigMouseClicked.disconnect(self.completion)
+            self.is_new=False
             self.translatable=True
             self.setSelected(True)
 
-    def left_clicked(self, ev):
-        return super(DrawItem,self).left_clicked(ev)
+    # native override
+    def setState(self, state):
+        if len(self.getHandles())==2:
+            super().setState(state)
+        else:
+            ROI.setState(self, state)
+            for i,v in enumerate(self.getHandles()[:-1]):
+                p = [state['points'][i][0]+state['pos'][0], state['points'][i][1]+state['pos'][1]]
+                self.movePoint(v, p, finish=False)
+   
+            p = [state['points'][-1][0]+state['pos'][0], state['points'][-1][1]+state['pos'][1]]
+            self.movePoint(self.getHandles()[-1], p) 
     
-    def right_clicked(self,ev):#full override is simpler
-        super().right_clicked(ev)
-    
-    def ts_change(self, ts):
-        super().ts_change(ts)
-        self.setSelected(self.selected)
+    def set_dtc(self, dtc, **kwargs):
+        
+        if type(dtc) in (dtCords,list):
+            l=len(dtc)
+            assert (l>=len(self.getHandles())), "argument length is too short in set_dtc()"
 
-class DrawArrow(DrawItem,pg.LineSegmentROI):
-    def __init__(self,plt,coords=chtl.zero2P(),dialog=uitools.DrawPropDialog, **kwargs):
-        super().__init__(plt,dialog=dialog,**kwargs)
-        super(DrawItem,self).__init__(coords)
-        self.initialisation()
+            # Adds new segments on mouse clicks and on saved re-open
+            if l>2 and l>len(self.getHandles()):
+                l-=len(self.getHandles())
+                xy=self.endpoints[-1].pos()
+                # apply() order is important, adds timeseries and then calculates dt on the basis of xy
+                new_segments_dtc=dtCords.make(n=l).apply(dtPoint(ts=self.timeseries).apply(dtPoint(None,*xy)))         
+                self._dtc.adjoin(new_segments_dtc) 
+                for _ in range(l):
+                    self.addFreeHandle(xy)
+
+        return super().set_dtc(dtc, **kwargs)
+    
+    def paint(self, p, *args):
+        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, self._antialias)
+        p.setPen(self.currentPen)
+
+        points = [ep.pos() for ep in self.endpoints]  # Extract positions of endpoints
+
+        if points:  # Check if there are any points
+            p.drawPolyline(points)
+
+    def shape(self):
+        p = QtGui.QPainterPath()
+    
+        # Ensure mouse interactions over the entire painted shape
+        h1 = self.endpoints[0].pos()
+        h2 = self.endpoints[1].pos()
+        dh = h2-h1
+        if dh.length() == 0:
+            return p
+        pxv = self.pixelVectors(dh)[1]
+        if pxv is None:
+            return p
+            
+        pxv *= 4
+        
+        p.moveTo(h1+pxv)
+        p.lineTo(h2+pxv)
+        p.lineTo(h2-pxv)
+        p.lineTo(h1-pxv)
+        p.lineTo(h1+pxv)
+      
+        if len(self.endpoints)>2:
+            for i, ep in enumerate(self.endpoints[1:-1]):
+                h1=ep.pos()
+                h2=self.endpoints[i+2].pos() # next endpoint after ep, i+2 because the list is sliced 
+                p=self._shaper(p,h1,h2,pxv)
+
+        return p
+    
+    def right_clicked(self,ev):
+        if not self.is_new:
+            return DrawItem.right_clicked(self,ev)
+
+class DrawArrow(DrawSegment):
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,menu_name="Arrow",**kwargs)
         self.setPen(width=self.width,color=self.color,style=cfg.LINESTYLES[self.style])
         self.arrow=pg.ArrowItem(angle=self.ang, tipAngle=30, baseAngle=-30, headLen=10, 
             tailLen=None, brush=self.arcolor, pen={'width':self.width,'color':self.arcolor})
-        self.arrow.setPos(self.xy[1])
-        self.context_menu=self.create_menu(description='Arrow')
+        self.arrow.setPos(*self.rawdtc.get_raw_points()[1])
         self.plt.addItem(self.arrow)
 
         self.sigRegionChanged.connect(self.arrow_refresh)
         self.plt.vb.sigStateChanged.connect(self.arrow_refresh)
         self.plt.vb.sigTransformChanged.connect(self.arrow_refresh)
-
-    
-    def read_state(self):
-        return self.state['points']
-
-    def write_state(self):
-        self.state['points']=self.xy
 
     @property
     def ang(self):
@@ -1202,13 +1808,8 @@ class DrawArrow(DrawItem,pg.LineSegmentROI):
         return self.color if self.color is not None else '#ffffff'
 
     def arrow_refresh(self):
-        state=self.getState()
-        pos=state['points'][1]+state['pos']
-        self.arrow.setPos(pos)
+        self.arrow.setPos(*self.rawdtc.get_raw_points()[1])
         self.arrow.setStyle(angle=self.ang)
-    
-    def right_clicked(self, ev,**kwargs):
-        return super().right_clicked(ev,exec_on=True,**kwargs)
     
     def set_props(self, props):
         super().set_props(props)
@@ -1232,7 +1833,7 @@ class DrawPolyArrow(DrawPolyLine):
     
         self.arrow=pg.ArrowItem(angle=self.ang, tipAngle=30, baseAngle=-30, headLen=10, 
                 tailLen=None, brush=self.arcolor, pen={'width':self.width,'color':self.arcolor})
-        self.arrow.setPos(self.xy[1])
+        self.arrow.setPos(*self.rawdtc.get_raw_points()[1])
         self.context_menu=self.create_menu(description='Polyarrow')
         self.plt.addItem(self.arrow)
 
@@ -1277,870 +1878,6 @@ class DrawPolyArrow(DrawPolyLine):
         self.plt.vb.sigTransformChanged.disconnect(self.arrow_refresh)
         self.plt.removeItem(self.arrow)
         del self.arrow
-        return super().removal()
-
-class _Fiboline(pg.LineSegmentROI):
-    def __init__(self, *args,parent_line=None,**kwargs):
-        super().__init__(*args, positions=chtl.zero2P(),movable=False,rotatable=False,
-            resizable=False,**kwargs)
-        self.setParent(parent_line)
-        self.plt=self.parent().plt
-        self.setSelected(False)
-        self.is_persistent=False
-        self.props=None
-        self.label=None
-        for hd in self.getHandles():
-            hd.disconnectROI(self)
-        #Disconnect from mouse interactions
-        self.mouseDragHandler=None
-        self.mouseClickEvent=lambda *args: None
-        self.mouseDragEvent=lambda *args: None
-        self.hoverEvent=lambda *args: None
-
-        self.parent().sigRemoval.connect(self.removal)
-        self.parent().sigRayStatusUpdate.connect(self.set_level)
-        self.plt.vb.sigStateChanged.connect(self.refresh)        
-    
-    def set_level(self):
-        ext=self.parent().props['extension']
-        ax=self.plt.getAxis('bottom')
-
-        parent_state=self.parent().getState()
-        ppos=parent_state['pos']
-        ppoints=parent_state['points']
-        if isinstance(self.parent(), DrawFibo):
-            pts=[ppoints[0]+ppos,ppoints[1]+ppos]
-            dx=abs(pts[1].x()-pts[0].x())
-            xpos=min(pts[0].x(),pts[1].x())
-            dy=pts[0].y()-pts[1].y()
-            ypos=pts[1].y()
-        else:
-            pts=[ppoints[0]+ppos,ppoints[1]+ppos,ppoints[2]+ppos]
-            dx=abs(pts[2].x()-pts[1].x())
-            xpos=min(pts[1].x(),pts[2].x())
-            dy=pts[1].y()-pts[0].y()
-            ypos=pts[2].y()
-
-        x0=xpos-dx/2 if ext==cfg.RAYDIR['r'] or ext==cfg.RAYDIR['n'] else ax.range[0] 
-        x1=xpos+3*dx if ext==cfg.RAYDIR['l'] or ext==cfg.RAYDIR['n'] else ax.range[1]
-        y0=ypos+dy*self.props['value']/100
-        y1=y0
-
-        self.state=self.getState()
-        self.state['points']=[pg.Point(x0,y0),pg.Point(x1,y1)]
-        self.setState(self.state)
-       
-        if self.label is None:
-            self.label=pg.TextItem(text=self.props['desc'],color=self.props['color'],anchor=(1,0.75))
-            self.label.setParent(self.parent())
-            self.label.setPos(max(x0,min(x1,ax.range[1])),y1)
-            self.plt.addItem(self.label)
-        elif self.props['desc']=='':
-            self.plt.removeItem(self.label)
-            self.label=None
-        else:
-            self.label.setText(self.props['desc'])
-            self.label.setColor(self.props['color'])
-            self.label.setPos(max(x0,min(x1,ax.range[1])),y1)
-    
-    def set_props(self, props):
-        self.props=props
-        self.set_level()
-        self.setPen(width=props['width'],color=props['color'],style=cfg.LINESTYLES[props['style']])
-    
-    def refresh(self):
-        ext=self.parent().props['extension']
-        ax=self.plt.getAxis('bottom')
-
-        state=self.getState()
-        x0=state['points'][0][0]
-        x1=state['points'][1][0]
-
-        if ext==cfg.RAYDIR['l']:
-            x0=ax.range[0]
-            state['points'][0][0]=x0
-            self.setState(state)
-        elif ext==cfg.RAYDIR['r']:
-            x1=ax.range[1]
-            state['points'][1][0]=x1
-            self.setState(state)
-        elif ext==cfg.RAYDIR['b']:
-            x0=ax.range[0]
-            x1=ax.range[1]
-            state['points'][0][0]=x0
-            state['points'][1][0]=x1
-            self.setState(state)
-        
-        if self.label is not None:
-            y1=state['points'][1][1]
-            self.label.setPos(max(x0,min(x1,ax.range[1])),y1)
-    
-    def removal(self):
-        self.parent().sigRayStatusUpdate.disconnect(self.set_level)
-        self.parent().sigRemoval.disconnect(self.removal)
-        self.plt.vb.sigStateChanged.disconnect(self.refresh) 
-        self.plt.removeItem(self)
-        self.plt.removeItem(self.label)
-
-class FiboDialog(DTrendLineDialog):
-    initials={'width': 1,'color': '#ff0000', 'style': cfg.DOTLINE}
-    def __init__(self,*args,**kwargs):
-        super().__init__(*args,exec_on=False,**kwargs)
-        self.__class__.initials['color']='red' #override
-        self.setup_extension()
-
-class FiboTabsDialog(uitools.TabsDialog):
-    level_props=dict(uitools.TabsDialog.level_props)
-    def __init__(self,plt,item=None,**kwargs):
-        level_props=dict(width=cfg.FIBOWIDTH,color=cfg.FIBOCOLOR,style=cfg.FIBOSTYLE)
-        #set default color of levels at the foreground color
-        level_props['color']=plt.graphicscolor
-        super().__init__(FiboDialog,plt,wname='Fibonacci retracements',item=item,
-            level_props=level_props,**kwargs)
-
-def fibo_factory(base=pg.LineSegmentROI,dialog=FiboTabsDialog,clicks=2,
-        preset_levels=(0.0,38.2,50.0,61.8,100.0)):
-    class _Fibo(DrawItem,base):
-        sigRemoval=QtCore.Signal()
-        sigRayStatusUpdate=QtCore.Signal()
-        sigTimeseriesChanged=QtCore.Signal(object)
-
-        def __init__(self,plt,coords=chtl.zero2P(),**kwargs):
-            super().__init__(plt,dialog=dialog,props=dict(width=cfg.FIBOLINEWIDTH,
-                color=cfg.FIBOLINECOLOR,style=cfg.FIBOSTYLE),clicks=clicks,**kwargs)
-            super(DrawItem,self).__init__(coords)
-            if 'extension' not in self.props:
-                self.props['extension']=cfg.RAYDIR['n']
-            self.initialisation()
-            pen=dict(width=self.width,color=self.color,style=cfg.LINESTYLES[self.style])
-            self.setPen(**pen)
-            self.hoverPen=pg.functions.mkPen(**pen)#remove hover
-            level_props=dict(width=cfg.FIBOWIDTH,color=cfg.FIBOCOLOR,style=cfg.FIBOSTYLE)
-            self.props['levels']=[]
-            for lvl in preset_levels:
-                self.props['levels'].append(dict(show=True,value=lvl,desc=str(lvl),**level_props))
-            #set metaprops in newly created (not saved) object
-            if self.is_new and self.myref in self.mprops:
-                self.props=dict(self.mprops[self.myref])
-            #set default levels at the foreground color
-            metalevels=self.mprops[self.myref]['levels'] if self.myref in self.mprops and 'levels' in self.mprops[self.myref] else None
-            if metalevels is None:
-                for lvl in self.props['levels']:
-                    lvl['color']=self.plt.graphicscolor
-            self.ray=self
-            self.level_items=[]
-            self.set_levels()
-            
-            self.sigRegionChanged.connect(self.set_levels)    
-            self.context_menu=self.create_menu(ray_on=True)
-
-            self.plt.sigMouseOut.connect(self.magnetize)
-
-        def set_levels(self):
-            #To avoid full levels deletion and restatement, calc and process only the difference
-            
-            dcl=[m for m in self.props['levels'] if m['show']==True] #show==True dict slice
-            diff=len(dcl)-len(self.level_items)
-
-            if diff>0:
-                while diff!=0:
-                    newitem=_Fiboline(parent_line=self)
-                    self.level_items.append(newitem)
-                    self.plt.addItem(newitem)
-                    diff-=1
-            else:
-                while diff!=0:
-                    itm=self.level_items.pop()
-                    itm.removal()
-                    diff+=1
-            
-            for i,item in enumerate(self.level_items):
-                lvl=dcl[i]
-                if lvl['show']:
-                    item.set_props(lvl) 
-        
-        def repaint_ray(self):
-            self.sigRayStatusUpdate.emit()
-
-        def ts_change(self, ts):
-            super().ts_change(ts)
-            self.set_levels()
-
-        def read_state(self):
-            return self.state['points']
-
-        def write_state(self):
-            self.state['points']=self.xy
-        
-        def set_props(self,props):
-            super().set_props(props)
-            self.update_menu()
-            self.set_levels()
-        
-        def right_clicked(self,ev):
-            super().right_clicked(ev,tseries=self.timeseries,dtxy=self.dtxy)
-
-        def removal(self):
-            self.sigRemoval.emit()
-            self.sigRegionChanged.disconnect(self.set_levels)
-            self.plt.sigMouseOut.disconnect(self.magnetize)   
-            self.plt.removeItem(self)
-    return _Fibo
-
-_DrawFibo=fibo_factory()
-
-class DrawFibo(_DrawFibo):
-    def __init__(self, plt, coords=chtl.zero2P(), **kwargs):
-        super().__init__(plt, coords, **kwargs)
-        self.context_menu=self.create_menu(description='Fibo',ray_on=True)
-
-class FiboExtDialog(DTrendLineDialog):
-    initials={'width': 1,'color': '#ff0000', 'style': cfg.DOTLINE}
-    def __init__(self,*args,exec_on=False,dtxy=chtl.zero2P(),wname=None,**kwargs):
-        super().__init__(*args,exec_on=False,dtxy=dtxy,**kwargs)
-        self.__class__.initials['color']='red' #override
-        self.setup_extension()
-        self.dtx.append(None)
-        self.dtxs.append(None)
-        self.dte.append(None)
-        self.dtx[2]=dtxy[2][0]
-        self.dtxs[2] = datetime.datetime.fromtimestamp(self.dtx[2])
-        self.yv2=dtxy[2][1]
-
-        label0=QtWidgets.QLabel('Datetime 3: ')
-        self.dte[2]=QtWidgets.QDateTimeEdit()
-        self.dte[2].setDateTime(self.dtxs[2])
-        self.dte[2].setDisplayFormat('dd.MM.yyyy hh:mm')
-        self.layout.addWidget(label0,self.order,0)
-        self.layout.addWidget(self.dte[2],self.order,1)
-        self.dte[2].dateTimeChanged.connect(lambda *args: self.update_dt(2))
-
-        label1=QtWidgets.QLabel('Value 3: ')
-        pbox=QtWidgets.QDoubleSpinBox()
-        pbox.setDecimals(self.item.precision)
-        pbox.setSingleStep(pow(10,-self.item.precision))
-        pbox.setMaximum(self.yv2*100)
-        pbox.setValue(self.yv2)
-        self.layout.addWidget(label1,self.order,3)
-        self.layout.addWidget(pbox,self.order,4)
-        pbox.valueChanged.connect(lambda *args: setattr(self,'yv2',pbox.value()))
-        self.order+=1
-
-        if exec_on:
-            self.setWindowTitle(wname)
-            self.embedded_db()
-            self.exec()
-
-    @property
-    def dtxy(self):
-        return [[self.dtx[0],self.yv0],[self.dtx[1],self.yv1],[self.dtx[2],self.yv2]]
-
-class FiboExtTabsDialog(uitools.TabsDialog):
-    levels_props=dict(uitools.TabsDialog.level_props)
-    def __init__(self,plt,item=None,**kwargs):
-        level_props=dict(width=cfg.FIBOWIDTH,color=cfg.FIBOCOLOR,style=cfg.FIBOSTYLE)
-        #set default color of levels at the foreground color
-        level_props['color']=plt.graphicscolor
-        super().__init__(FiboExtDialog,plt,wname='Fibonacci extensions',item=item,
-            level_props=level_props,**kwargs)
-
-_DrawFiboExt=fibo_factory(base=AltPolyLine,dialog=FiboExtTabsDialog,clicks=3,
-        preset_levels=(61.8,100.0,161.8))
-
-class DrawFiboExt(_DrawFiboExt):
-    def __init__(self, plt, coords=chtl.zero2P(), **kwargs):
-        super().__init__(plt, coords, **kwargs)
-        self.context_menu=self.create_menu(description='Fibo Extension',ray_on=True)
-    
-    def magnetize(self, hls=3):
-        return super().magnetize(hls)
-
-    def set_levels(self):
-        if len(self.getState()['points'])==self.clicks: #to ensure the second segment spawn before the fibolines
-                                                #and workaround pg bug
-            return super().set_levels()
-    
-    def ts_change(self, ts):
-        DrawItem.ts_change(self,ts)
-        self.setSelected(self.selected)
-        self.set_levels()
-
-    def left_clicked(self, ev):
-        return AltPolyLine.left_clicked(self,ev)
-
-class _ChannelBaseline(DrawTrendLine):
-    def __init__(self,*args,parent_line=None,**kwargs):
-        super().__init__(*args, **kwargs)
-        self.is_persistent=False
-        handles=self.getHandles()
-        for i,hd in enumerate(handles):
-            hd.mouseDragEvent=self.mouseDragEvent
-            hd.disconnectROI(self)
-            if i==1:
-                hPen=QtCore.Qt.NoPen
-                hd.pen=hPen
-                hd.currentPen=hPen
-                hd.hoverPen=hPen
-
-        self.setParent(parent_line)
-        props=self.parent().get_props()
-        self.set_props(props)
-        self.ray_sync()
-
-        if self.parent().is_new:
-            self._x,self._y=None,None
-            self.plt.scene().sigMouseMoved.connect(self.setup_baseline)
-        else:
-            self.translatable=False
-
-        # turn off self.change to fix datetime updating on the item's position changes
-        self.change=True
-        self.sigRegionChangeStarted.disconnect(self.change_state)
-        self.change_state=lambda *args: None
-
-        # override ts change
-        self.plt.subwindow.plt.sigTimeseriesChanged.disconnect(self.ts_change)
-        self.parent().sigTimeseriesChanged.connect(self.ts_change)
-        
-        self.parent().sigDeltasUpdated.connect(self.sync_with_parent)
-        self.parent().sigRemoval.connect(self.removal)
-        self.parent().sigPropsChanged.connect(self.set_props)
-        self.parent().sigRayStatusUpdate.connect(self.ray_sync)
-
-    def setup_baseline(self,ev):
-        xy=self.plt.vb.mapSceneToView(ev)
-        x=xy.x()
-        y=xy.y()
-        if self._x is None and self._y is None:
-            self._x=x
-            self._y=y
-            #move the anchor to the segment's end point
-            self.translate(self.parent().relative_pos)
-            self.plt.scene().sigMouseClicked.connect(self.finish_baseline_setup)
-        else:
-            dx=x-self._x
-            dy=y-self._y
-            self.translate(dx,dy)
-            self._x=x
-            self._y=y
-    
-    def finish_baseline_setup(self):
-        self.plt.scene().sigMouseMoved.disconnect(self.setup_baseline)
-        self.plt.scene().sigMouseClicked.disconnect(self.finish_baseline_setup)
-        del self._x
-        del self._y
-
-    def sync_with_parent(self,deltas):
-        self.state['pos']=Point(0.0,0.0)
-        #anchor point stationary, only the second point is moving when rotating the channel:
-        self.state['points'][0]+=deltas['pos']
-        self.state['points'][1]+=-deltas['points'][0]+deltas['points'][1]+deltas['pos']
-        self.setState(self.state)
-        self.xy=self.state['points']
-        self.xy_ticks_to_times()
-    
-    def set_props(self,props):
-        super().set_props(props)
-        try:
-            self.dtxy[0]=props['anchor_dt']
-            self.xy_times_to_ticks()
-            state=self.getState()
-            self.xy[1]=self.xy[0]+self.parent().relative_pos
-            state['points']=self.xy
-            self.setState(state)
-            #restore hotfix to avoid reset of self.dtxy[0] on self.setState() above after restore
-            if not self.parent().is_new:
-                self.dtxy[0]=props['anchor_dt']
-        except Exception:
-            pass
-    
-    def ts_change(self, ts, relpos):
-        self.timeseries=ts
-        self.xy_times_to_ticks()
-        state=self.getState()
-        state['points'][0]=self.xy[0]
-        state['points'][1]=self.xy[0]+relpos
-        self.setState(state)
-        
-    def right_clicked(self, ev):
-        return self.parent().right_clicked(ev)
-
-    def left_clicked(self,ev):
-        super().left_clicked(ev)
-        try:
-            self.parent().set_selected(self.translatable)
-        except Exception:
-            pass
-    
-    def ray_sync(self):
-        self.props['extension']=self.parent().props['extension']
-        self.repaint_ray()
-    
-    def hoverEvent(self, ev):
-        if ev.isExit() and self.translatable==False:#fix post-restore non-disappearance bug
-            for hd in self.getHandles():
-                hd.hide()
-        super().hoverEvent(ev)
-    
-    def magnetize(self):
-        super().magnetize(hls=1)#magnetize only the first handle
-        state=self.getState()
-        state['points'][1]=state['points'][0]+self.parent().relative_pos
-        self.setState(state)
-
-    def removal(self):
-        self.plt.removeItem(self)
-        self.plt.removeItem(self.ray)
-
-class _ChannelParallel(DrawTrendLine):
-    def __init__(self, pvalue, *args,parent_line=None,**kwargs):
-        super().__init__(*args,**kwargs)
-        self.pvalue=pvalue
-        self.setSelected(False)
-        self.translatable=False
-        self.is_persistent=False
-        for hd in self.getHandles():
-            hd.disconnectROI(self)
-        self.setParent(parent_line)
-        #Disconnect from mouse interactions
-        self.mouseDragHandler=None
-        self.mouseClickEvent=lambda *args: None
-        self.mouseDragEvent=lambda *args: None
-        self.hoverEvent=lambda *args: None
-        self.ray.mouseClickEvent=lambda *args: None
-        self.ray.mouseDragEvent=lambda *args: None
-        self.ray.hoverEvent=lambda *args: None
-        self.left_clicked=lambda *args: None
-        self.right_clicked=lambda *args: None
-
-        self.set_parallel()
-        self.ray_sync()
-
-        self.plt.subwindow.plt.sigTimeseriesChanged.disconnect(self.ts_change)
-        self.parent().sigRemoval.connect(self.removal)
-        self.parent().sigRayStatusUpdate.connect(self.ray_sync)
-        self.parent().sigPropsChanged.connect(self.ray_sync) #required as 'extension' prop is not a part of the 'level_props' list in LeveLRow class
-
-        self.parent().sigRegionChanged.connect(self.set_parallel)
-        self.parent().sigRegionChangeFinished.connect(self.set_parallel)
-        self.parent().baseline.sigRegionChanged.connect(self.set_parallel)
-        self.parent().baseline.sigRegionChangeFinished.connect(self.set_parallel)
-
-    def set_parallel(self):
-        parent_state=self.parent().getState()
-        ppos=parent_state['pos']
-        ppoints=parent_state['points']
-        parent_points=[ppoints[0]+ppos,ppoints[1]+ppos]
-        baseline_state=self.parent().baseline.getState()
-        bpos=baseline_state['pos']
-        bpoints=baseline_state['points']
-        baseline_points=[bpoints[0]+bpos,bpoints[1]+bpos]
-        points=[]
-        points.append(parent_points[0]+(self.pvalue/100)*(baseline_points[0]-parent_points[0]))
-        points.append(parent_points[1]+(self.pvalue/100)*(baseline_points[1]-parent_points[1]))
-        self.state=self.getState()
-        self.state['points']=points
-        self.setState(self.state)
-    
-    def ray_sync(self):
-        self.props['extension']=self.parent().props['extension']
-        self.repaint_ray()
-    
-    def set_props(self, props):
-        self.pvalue=props['value']
-        self.set_parallel()
-        super().set_props(props)
-    
-    def removal(self):
-        self.parent().sigRemoval.disconnect(self.removal)
-        self.parent().sigRayStatusUpdate.disconnect(self.ray_sync)
-        self.parent().sigPropsChanged.disconnect(self.ray_sync) #required as 'extension' prop is not a part of the 'level_props' list in LeveLRow class
-
-        self.parent().sigRegionChanged.disconnect(self.set_parallel)
-        self.parent().sigRegionChangeFinished.disconnect(self.set_parallel)
-        self.parent().baseline.sigRegionChanged.disconnect(self.set_parallel)
-        self.parent().baseline.sigRegionChangeFinished.disconnect(self.set_parallel)
-        
-        self.plt.removeItem(self.ray)
-        self.plt.removeItem(self)
-
-class DChannelDialog(DTrendLineDialog):
-    initials=dict(DTrendLineDialog.initials)
-    initials['anchor_dt']=anchor_dt=None
-    def __init__(self, *args, tseries=None,exec_on=False, anchor=[0,0], **kwargs):
-        super().__init__(*args, tseries=tseries,exec_on=False, **kwargs)
-        self.state_dict['anchor_dt']=self.__class__.anchor_dt
-        self.setup_extension()
-        self.dtx.append(None)
-        self.dtxs.append(None)
-        self.dte.append(None)
-        self.dtx[2]=anchor[0]
-        self.dtxs[2] = datetime.datetime.fromtimestamp(self.dtx[2])
-        self.yv2=anchor[1]
-
-        label0=QtWidgets.QLabel('Datetime 3: ')
-        self.dte[2]=QtWidgets.QDateTimeEdit()
-        self.dte[2].setDateTime(self.dtxs[2])
-        self.dte[2].setDisplayFormat('dd.MM.yyyy hh:mm')
-        self.layout.addWidget(label0,self.order,0)
-        self.layout.addWidget(self.dte[2],self.order,1)
-        self.dte[2].dateTimeChanged.connect(lambda *args: self.update_dt(2))
-
-        label1=QtWidgets.QLabel('Value 3: ')
-        pbox=QtWidgets.QDoubleSpinBox()
-        pbox.setDecimals(self.item.precision)
-        pbox.setSingleStep(pow(10,-self.item.precision))
-        pbox.setMaximum(self.yv2*100)
-        pbox.setValue(self.yv2)
-        self.layout.addWidget(label1,self.order,3)
-        self.layout.addWidget(pbox,self.order,4)
-        pbox.valueChanged.connect(lambda *args: setattr(self,'yv2',pbox.value()))
-        self.order+=1
-
-        if exec_on==True:
-            self.embedded_db()
-            self.exec()
-
-    def update_item(self, **kwargs):
-        self.item.sigRegionChanged.disconnect(self.item.deltas_update)#to block anchor pos change unless explicit
-        self.__class__.anchor_dt=(self.dtx[2],self.yv2)
-        super().update_item(**kwargs)
-        
-        self.item._state=self.item.state #workaround to block after-dialog baseline move
-        blp=self.item.baseline.state['points']
-        blp[1]=blp[0]+self.item.relative_pos
-        self.item.baseline.setState(self.item.baseline.state) #re-position baseline if relative_pos changed
-        self.item.sigRegionChanged.connect(self.item.deltas_update)#reconnect after dialog
-
-class DChannelTabsDialog(uitools.TabsDialog):
-    def __init__(self,plt,item=None,**kwargs):
-        level_props=dict(desc_on=False,width=cfg.FIBOWIDTH,color=cfg.FIBOCOLOR,style=cfg.FIBOSTYLE)
-        #set default color of levels at the foreground color
-        level_props['color']=plt.graphicscolor
-        super().__init__(DChannelDialog,plt,wname='Channel',item=item,level_props=level_props,**kwargs)
-
-class DrawChannel(DrawTrendLine):
-    sigDeltasUpdated=QtCore.Signal(object)
-    sigRemoval=QtCore.Signal()
-    sigPropsChanged=QtCore.Signal(object)
-    sigRayStatusUpdate=QtCore.Signal()
-    sigTimeseriesChanged=QtCore.Signal(object,object)   
-
-    def __init__(self, plt, coords=chtl.zero2P(), levels=None,**kwargs):
-        super().__init__(plt, coords=coords, dialog=DChannelTabsDialog,**kwargs)
-        self._state=dict(self.state) #to keep record of the pre-event state
-        #set default levels
-        level_props=dict(width=cfg.FIBOWIDTH,color=cfg.FIBOCOLOR,style=cfg.FIBOSTYLE)
-        self.props['levels']=[]
-        for lvl in [50.0]:
-            self.props['levels'].append(dict(show=False,value=lvl,desc_on=False,removable=False,**level_props))
-        #set metaprops in newly created (not saved) object
-        if self.is_new and self.myref in self.mprops:
-            self.props=dict(self.mprops[self.myref])
-        #reset/remove anchor_dt that earlier propogated to the metaprops variable:
-        try: self.props.pop('anchor_dt')
-        except Exception:pass
-        #set default level (50.0) at foreground color
-        metalevels=self.mprops[self.myref]['levels'] if self.myref in self.mprops and 'levels' in self.mprops[self.myref] else None
-        if metalevels is None:
-            for lvl in self.props['levels']:
-                lvl['color']=self.plt.graphicscolor
-        if levels is not None:
-            self.props['levels']=levels
-        self.level_items=[]
-        if self.is_new==False: #used when sourced from saved state file
-            if metalevels is not None:
-                self.props['levels']=metalevels
-            self.setup_lines()
-            self.baseline.setSelected(False)
-        self.context_menu=self.create_menu(ray_on=True,description='Channel')
-
-        self.sigRegionChanged.connect(self.deltas_update)
-    
-    def setup_mouseclicks(self, mouseClickEvent):
-        super().setup_mouseclicks(mouseClickEvent)
-        if self.is_new and self.click_count==self.clicks:
-            self.setup_lines()    
-    
-    def setup_lines(self):
-        self.baseline=_ChannelBaseline(self.plt,coords=self.xy,parent_line=self)
-        self.plt.addItem(self.baseline)
-        self.set_levels()#must be set after the baseline
-        self._state=dict(self.state)
-
-    @property
-    def deltas(self):
-        d0=self.state['points'][0]-self._state['points'][0]
-        d1=self.state['points'][1]-self._state['points'][1]
-        dpoints=[d0,d1]
-        dpos=self.state['pos']-self._state['pos']
-        dlts=dict(self.state)
-        dlts['pos']=dpos
-        dlts['points']=dpoints
-        self._state=dict(self.state)
-        return dlts
-    
-    def deltas_update(self):
-        if self.change:
-            self.sigDeltasUpdated.emit(self.deltas)
-        else: #to ensure correct _self.state reset
-            self._state=self.state
-
-    def mouse_update(self): #to ensure correct _self.state reset in sigRangeChangeFinished()
-        if hasattr(self,'_state'):
-            self._state['pos']=Point(0.0,0.0)
-        super().mouse_update()        
-        
-    @property
-    def relative_pos(self):
-        state=self.getState()
-        return state['points'][1]-state['points'][0]
-
-    def save_props(self):
-        self.change_state() # to ensure that the state is not lost on
-        self.deltas_update() # saves and restores
-        bdtxy0=self.baseline.dtxy[0]
-        if isinstance(bdtxy0,Point):
-            self.props['anchor_dt']=[bdtxy0.x(),bdtxy0.y()]
-        else:
-            self.props['anchor_dt']=bdtxy0
-        return super().save_props()
-
-    def set_props(self, props):
-        super().set_props(props)
-        self.set_levels()
-        self.sigPropsChanged.emit(props)
-
-    def right_clicked(self, ev):
-        super(DrawTrendLine,self).right_clicked(ev,anchor=self.baseline.dtxy[0],tseries=self.timeseries,
-            dtxy=self.dtxy)
-        if self.maction==self.ray_left_act or self.maction==self.ray_right_act:
-            self.sigRayStatusUpdate.emit()
-
-    def left_clicked(self,ev):
-        super().left_clicked(ev)
-        self.set_baseline_selected(self.translatable)
-
-    def set_baseline_selected(self,s):
-        try:
-            self.baseline.translatable=s
-            self.baseline.setSelected(s)
-            self.baseline.ray.setMovable(s)
-        except Exception:
-            pass
-    
-    def set_selected(self, s):
-        self.set_baseline_selected(s)
-        return super().set_selected(s)
-
-    def set_levels(self):
-        #To avoid full levels deletion and restatement, calc and process only the difference
-        
-        dcl=[m for m in self.props['levels'] if m['show']==True] #show==True dict slice
-        diff=len(dcl)-len(self.level_items)
-
-        if diff>0:
-            while diff!=0:
-                newitem=_ChannelParallel(0.0,self.plt,parent_line=self)
-                self.level_items.append(newitem)
-                self.plt.addItem(newitem)
-                diff-=1
-        else:
-            while diff!=0:
-                itm=self.level_items.pop()
-                itm.removal()
-                del itm.ray
-                del itm
-                diff+=1
-        
-        for i,item in enumerate(self.level_items):
-            lvl=dcl[i]
-            if lvl['show']:
-                item.set_props(lvl)    
-
-    def ts_change(self, ts):
-        self.sigRegionChanged.disconnect(self.deltas_update)
-        super().ts_change(ts)
-        self._state=dict(self.state)
-        self.sigRegionChanged.connect(self.deltas_update)
-        self.sigTimeseriesChanged.emit(ts,self.relative_pos)
-
-    def removal(self):
-        self.sigRemoval.emit()
-        super().removal()
-
-class _PRay(AltInfiniteLine): #Pitchfork ray class
-    def __init__(self, *args, parent=None,**kwargs):
-        super().__init__(*args, **kwargs)
-        self.extension=cfg.RAYDIR['r']
-        self.setSelected(False)
-        self.translatable=False
-        self.is_persistent=False
-        self.setParent(parent)
-        #Disconnect from mouse interactions
-        self.hoverEvent=lambda *args: None
-        self.evpos=lambda ev: self.mapToView(ev.pos())
-        
-        self.parent().sigPropsChanged.connect(self.set_props)
-
-    def mouseDragEvent(self, ev):
-        return self.parent().mouseDragEvent(ev)
-    
-    def left_clicked(self,ev):
-        return self.parent().left_clicked(ev)
-
-    def right_clicked(self,ev):
-        return self.parent().right_clicked(ev)
-
-class _Pitchfork:
-    def __init__(self,parent) -> None:
-        self.parent=parent
-        self.plt=self.parent.plt
-        self.prays=[]
-        xy=self.xy()
-        pangle=self.pangle()
-        for pt in xy:
-            pray=_PRay(self.plt,parent=self.parent,pos=pt,angle=pangle)
-            self.prays.append(pray)
-            self.plt.addItem(pray)
-    
-        self.parent.sigRegionChanged.connect(self.refresh)
-
-    def xy(self):
-        pstate=self.parent.getState()
-        ppos=pstate['pos']
-        ppoints=pstate['points']
-        while len(ppoints)<self.parent.clicks:#stub for restore initialisation
-            ppoints.append(Point(0.0,0.0))
-        xy=[]
-        for pt in ppoints:
-            xy.append(pt+ppos)
-        return xy
-    
-    def pangle(self): #pitchfork angle
-        xy=self.xy()
-        dxy=xy[1]+(xy[2]-xy[1])/2-xy[0]
-        return math.degrees(math.atan2(dxy.y(),dxy.x()))
-
-    def refresh(self):
-        xy=self.xy()
-        if len(xy)==self.parent.clicks: #to ensure 2 legs and workaround pg getState() bug
-            pangle=self.pangle()
-            for i,pray in enumerate(self.prays):
-                pray.setPos(xy[i])
-                pray.setAngle(pangle)
-    
-    def removal(self):
-        for pray in self.prays:
-            self.plt.removeItem(pray)
-
-class DrawPitchfork(DrawItem,AltPolyLine):
-    sigPropsChanged=QtCore.Signal(object)
-    def __init__(self,plt,coords=chtl.zero2P(),clicks=3,**kwargs):
-        dlg=lambda *args,**kwargs: FiboExtDialog.__call__(*args,exec_on=True,
-            wname='Pitchfork',**kwargs)
-        super().__init__(plt,dialog=dlg,clicks=clicks,**kwargs)
-        super(DrawItem,self).__init__(coords)
-        self.initialisation()
-        self.set_transparency()
-        self.setZValue(-10)
-        self.is_draw=False #to exclude the body of the roi from valid selectable areas and leave only the segments as such areas
-        self.pfork=None
-        self.context_menu=self.create_menu(description='Pitchfork')
-
-        if not self.is_new:
-            self.set_pitchfork()
-
-        self.sigRegionChangeFinished.connect(self.nullify_pos)
-        self.plt.sigMouseOut.connect(self.magnetize)
-
-    def setup_mousemoves(self, mouseMoveEvent):
-        super().setup_mousemoves(mouseMoveEvent)
-        if self.click_count==2 and self.pfork is None:
-            self.set_pitchfork()
-            self.sigPropsChanged.emit(self.props)
-
-    def set_transparency(self):
-        transparent=QtGui.QColor(QtCore.Qt.transparent)
-        self.setPen(color=transparent)
-        self.hoverPen.setColor(transparent)
-
-    def set_props(self,props):
-        try:
-            props.pop('extension')
-        except Exception:
-            pass
-        super().set_props(props)
-        self.set_transparency()
-        self.sigPropsChanged.emit(props)
-
-    def set_pitchfork(self):
-        self.pfork=_Pitchfork(self)
-
-    def nullify_pos(self):
-        state=self.getState()
-        ppos=state['pos']
-        if ppos!=Point(0.0,0.0):
-            ppoints=state['points']
-            ps=[ppoints[0]+ppos,ppoints[1]+ppos]
-            state['points']=ps
-            state['pos']=Point(0.0,0.0)
-            self.setState(state)
-    
-    def left_clicked(self, ev):
-        if not self.contains(ev.pos()):
-            return super().left_clicked(ev)
-
-    def right_clicked(self,ev):#full override is simpler
-        if not self.contains(ev.pos()):
-            super().right_clicked(ev,tseries=self.timeseries,dtxy=self.dtxy)
-    
-    def ts_change(self, ts):
-        super().ts_change(ts)
-        self.setSelected(self.selected)
-    
-    def mouseDragEvent(self, ev):
-        if not self.contains(ev.pos()):
-            super().mouseDragEvent(ev)
-
-    def magnetize(self, hls=3):
-        return super().magnetize(hls)
-
-    def removal(self):
-        self.pfork.removal()
-        del self.pfork
-        super().removal()
-
-class DrawRuler(DrawTrendLine):
-    def __init__(self, plt, coords=chtl.zero2P(),**kwargs):
-        super().__init__(plt, coords,**kwargs)
-        super().set_props(dict(color='r', extension=cfg.RAYDIR['n']))
-        self.tag=pg.TextItem(text="Text",color='r',anchor=(0.5,1))
-        self.plt.addItem(self.tag)
-
-        self.sigRegionChanged.connect(self.ruler_tag)
-        self.plt.vb.sigStateChanged.connect(self.ruler_tag)
-        self.plt.vb.sigTransformChanged.connect(self.ruler_tag)
-
-        self.context_menu=self.create_menu(ray_on=False,description="Ruler")
-
-    def ruler_tag(self):
-        state=self.getState()
-        pos=state['pos']
-        points=state['points']
-        delta=points[1]-points[0]
-        self.tag.setPos(pos+points[1])
-        bars=int(delta[0]//self.timeseries.timeframe)
-        pips=(delta[1])*chtl.to_pips(self.timeseries.symbol)
-        self.tag.setText(f"Pips: {pips:.1f}\nBars: {str(bars)}")
-    
-    def set_props(self,props):
-        if 'color' in props:
-            self.tag.setColor(props['color'])
-        return super().set_props(props)
-    
-    def removal(self):
-        self.plt.removeItem(self.tag)
         return super().removal()
 
 class CrossHair:
@@ -2287,7 +2024,7 @@ class AltPlotWidget(pg.PlotWidget):
     sigChartPropsChanged=QtCore.Signal(object)
     def __init__(self, mwindow=None, subwindow=None,chartitem=None, draw_mode=None, crosshair_enabled=False, 
             plotID=None,chartprops=cfg.D_CHARTPROPS,*args,**kwargs):
-        super().__init__(*args,**kwargs)
+        super().__init__(*args,**kwargs)       
         self.plotID=chtl.nametag() if plotID is None else plotID
         self.description=''
         self.mwindow=mwindow
@@ -2368,15 +2105,15 @@ class AltPlotWidget(pg.PlotWidget):
         if self.draw_mode is None:
             if mouseClickEvent.button()==QtCore.Qt.MouseButton.MiddleButton:
                 self.cross_hair()
-            nodrawhit=True #unselect draw items if clicked to empty space
+            no_draw_hit=True #unselect draw items if clicked to empty space
             if self.hovered_items is not None:
                 for itm in self.hovered_items:
                     if chtl.item_is_draw(itm):
-                        nodrawhit=False
+                        no_draw_hit=False
                         break
-            if nodrawhit:
+            if no_draw_hit:
                 for itm in self.listItems():
-                    if isinstance(itm,DrawItem) or isinstance(itm,AltInfiniteLine):
+                    if hasattr(itm,"is_draw") and itm.is_draw is True:
                         itm.set_selected(False)
         else:
             mapped_xy=Point(self.vb.mapSceneToView(mouseClickEvent.scenePos()))
@@ -2384,11 +2121,11 @@ class AltPlotWidget(pg.PlotWidget):
                 dockplt=dk.widgets[0]
                 if dockplt is not self:
                     dockplt.draw_mode=None
-                    if chtl.OBJ_IS('InfiniteLine',self.draw_mode):
+                    if issubclass(self.draw_mode,AltInfiniteLine):
                         dockplt.item_in_progress.removal()
                         dockplt.item_in_progress=None            
     
-            if chtl.OBJ_IS('ROI',self.draw_mode): #items requiring 2 or more clicks - for initiation and finalisation
+            if issubclass(self.draw_mode,pg.ROI) or hasattr(self.draw_mode,'multiclick'): #items requiring 2 or more clicks - for initiation and finalisation
                 xy=[mapped_xy,mapped_xy]
                 itm=self.draw_mode(self.subwindow.plt,xy,dockplt=self,caller='mouse_clicked')
                 self.draw_mode=None
@@ -2399,7 +2136,7 @@ class AltPlotWidget(pg.PlotWidget):
     def mouse_moved(self, mouseMoveEvent):
         self.mapped_xy=Point(self.vb.mapSceneToView(mouseMoveEvent))
         if self.draw_mode!=None: 
-            if chtl.OBJ_IS('InfiniteLine',self.item_in_progress):
+            if isinstance(self.item_in_progress, AltInfiniteLine):
                 self.item_in_progress.removal()
                 self.item_in_progress=self.draw_mode(self,self.mapped_xy)
                 self.addItem(self.item_in_progress)
@@ -2409,7 +2146,7 @@ class AltPlotWidget(pg.PlotWidget):
 
     def draw_act(self, action):
         self.draw_mode=action
-        if chtl.OBJ_IS('InfiniteLine',self.draw_mode):
+        if issubclass(self.draw_mode, AltInfiniteLine):
             self.item_in_progress=self.draw_mode(self)
         for dk in self.subwindow.docks:
             dockplt=dk.widgets[0]
@@ -2437,49 +2174,62 @@ class AltPlotWidget(pg.PlotWidget):
                 itm.set_selected(False)
                 if copyline:
                     if isinstance(itm,DrawChannel) or isinstance(itm,DrawFibo):
-                        newitm=DrawTrendLine(self)
-                    elif isinstance(itm,DrawPitchfork):
-                        xy=itm.pfork.xy()
-                        points=(xy[0],xy[1]+(xy[2]-xy[1])/2)
+                        points=itm.get_dtc().get_raw_points()[:2]
                         newitm=DrawTrendLine(self,coords=points)
-                        newitm.props['extension']=cfg.RAYDIR['r']
+                    elif isinstance(itm,DrawPitchfork):
+                        xy=itm.get_dtc().get_raw_points()
+                        points=(Point(*xy[0]),Point(*xy[1])+(Point(*xy[2])-Point(*xy[1]))/2)
+                        newitm=DrawTrendLine(self,coords=points)
+                        newitm.props['raydir']=cfg.RAYDIR['r']
                     else:
                         newitm=itm.__class__(self)
+                        try:newitm.set_dtc(itm.save_dtc())
+                        except Exception:pass
                 else:
                     newitm=itm.__class__(self)
-                self.addItem(newitm)
-                if not copyline or not isinstance(itm,DrawPitchfork):
-                    try:newitm.set_dt(itm.save_dt())
+                    try:newitm.set_dtc(itm.save_dtc())
                     except Exception:pass
-                try:newitm.set_props(itm.save_props())
-                except Exception:pass
-                try: newitm.repaint_ray()
-                except Exception:pass
+
+                self.addItem(newitm)
+                try:
+                    props=itm.save_props()
+                    if isinstance(itm, DrawPitchfork) and isinstance(newitm,DrawTrendLine):
+                        props['raydir']=cfg.RAYDIR['r']
+                    newitm.set_props(props)
+                except Exception:
+                    pass
                 vr=self.viewRange()
                 rn=[x*cfg.COPY_DIST for x in [vr[0][1]-vr[0][0],vr[1][1]-vr[1][0]]]
                 newitm.translate(0,rn[1],None)
   
     def select_all_act(self):
         for itm in self.listItems():
-            if (isinstance(itm,DrawItem) or isinstance(itm,AltInfiniteLine)) and itm.is_persistent:
+            if hasattr(itm,"is_persistent") and itm.is_persistent and hasattr(itm,"is_draw") and itm.is_draw:
                 itm.set_selected(True)
 
     def deselect_all_act(self):
         for itm in self.listItems():
-            if (isinstance(itm,DrawItem) or isinstance(itm,AltInfiniteLine)) and itm.is_persistent:
+            if hasattr(itm, "is_persistent") and itm.is_persistent and hasattr(itm,"is_draw") and itm.is_draw:
                 itm.set_selected(False)
 
     def delete_act(self):
         for itm in self.listItems():
-            if (isinstance(itm,DrawItem) and itm.is_persistent and itm.translatable) or \
-                (isinstance(itm,AltInfiniteLine) and itm.is_persistent and itm.movable):
+            if isinstance(itm,DrawItem): 
+                if itm.is_persistent and itm.translatable:
+                    itm.item_hide(persistence_modifier=False)
+            elif isinstance(itm,AltInfiniteLine): 
+                if itm.is_persistent and itm.movable:
+                    itm.item_hide(persistence_modifier=False)
+            elif isinstance(itm,DrawProps) and itm.is_persistent and hasattr(itm, "is_selected") and itm.is_selected:
                 itm.item_hide(persistence_modifier=False)
-    
+
     def undo_act(self):
         for itm in self.listItems():
-            if isinstance(itm,DrawProps) and not itm.isVisible() and itm.parent() is None:
+            if isinstance(itm,DrawProps) and not itm.isVisible() and hasattr(itm,"parent") and itm.parent() is None:
                 itm.item_replicate()
                 itm.removal()
+            elif hasattr(itm,"multiclick") and not itm.isVisible():
+                itm.item_show()
 
     def priceline_act(self):
         if self.priceline_enabled==False:

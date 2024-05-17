@@ -1,7 +1,7 @@
 import PySide6
 import sys,inspect
 from pyqtgraph import Point
-import datetime
+from datetime import datetime
 import numpy as np
 import pandas as pd
 from pytz import timezone, UnknownTimeZoneError
@@ -48,23 +48,23 @@ def ticks_to_times(ts,x):
 
     return result
 
-def times_to_ticks(ts,x):
+def times_to_ticks(ts,dt):
     tf=ts.tf
     chart_adj=1*tf if tf in cfg.ADJUSTED_TIMEFRAMES else 0
     
-    if x>ts.times[-1]+tf: #to ensure that the entire last candle's time period is covered
-        result=ts.ticks[-1]+(x-ts.times[-1])-chart_adj
-    elif x<=ts.times[0]:
-        result=ts.ticks[0]-(ts.times[0]-x)
+    if dt>ts.times[-1]+tf: #to ensure that the entire last candle's time period is covered
+        result=ts.ticks[-1]+(dt-ts.times[-1])-chart_adj
+    elif dt<=ts.times[0]:
+        result=ts.ticks[0]-(ts.times[0]-dt)
     else:
-        i=np.where((ts.times<=x) & (x<ts.times+tf))[0][0]
+        i=np.where((ts.times<=dt) & (dt<ts.times+tf))[0][0]
         result=ts.ticks[i]
     
     return result
 
 def screen_to_plot(ts,x):
     dtx=ticks_to_times(ts,x)
-    dtxs = datetime.datetime.fromtimestamp(dtx)
+    dtxs = datetime.fromtimestamp(dtx)
     
     tf=ts.timeframe
     chart_adj=tf if tf in cfg.ADJUSTED_TIMEFRAMES else 0
@@ -75,31 +75,22 @@ def screen_to_plot(ts,x):
 
     return dtxs,ind
 
-def OBJ_IS(title,obj):
-    pfx='graphicsItems.'
-    title=f'{pfx}{title}'
-    try:
-        a=str(obj.__mro__)
-    except Exception:
-        a= str(type(obj).__mro__)
-    return a.find(title)!=-1
-
 def item_is_draw(item):
-    try:
+    if hasattr(item,"is_draw"):
         return item.is_draw
-    except Exception:
+    else:
         return False
 
 def item_is_study(item):
-    try:
+    if hasattr(item,"is_study"):
         return item.is_study
-    except Exception:
+    else:
         return False
 
 def item_is_cbl(item):
-    try:
+    if hasattr(item,"is_cbl"):
         return item.is_cbl
-    except Exception:
+    else:
         return False
 
 def ray_mode(state,action):
@@ -162,9 +153,9 @@ def transpose(lst):
 
 def nametag(cnt=None):
     if cnt is None:
-        return str(datetime.datetime.now().timestamp()).replace('.','')
+        return str(datetime.now().timestamp()).replace('.','')
     else:
-        return str(datetime.datetime.now().timestamp())[-cnt:].replace('.','')
+        return str(datetime.now().timestamp())[-cnt:].replace('.','')
 
 #from pg color format to hex
 from pyqtgraph.functions import Colors as pgColors

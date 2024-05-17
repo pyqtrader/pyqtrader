@@ -1,164 +1,315 @@
 import PySide6
 from PySide6 import QtWidgets,QtCore,QtGui
 from pyqtgraph import Point,TextItem
+from pyqtgraph.Qt.QtWidgets import QGraphicsItem
+from pyqtgraph import functions as fn
 
 import cfg
 import drawings as drws, drawings
 import overrides as ovrd, overrides
 import charttools as chtl,charttools
 import uitools
+from timeseries import dtPoint, dtCords
 
 from _debugger import _print,_printcallers,_c,_pc,_p
 
 class _DrawElliottLabel(TextItem):
-    def __init__(self,*args,parent=None,place=None,**kwargs):
+    def __init__(self,*args, handler=None,place=None,**kwargs):
         super().__init__(*args,anchor=(0.5,0.5),**kwargs)
         self.is_persistent=False
-        self.is_draw=True #to ensure that the parent roi is not unselected on click
-        self.setParent(parent)
-        self.place=place
-        self.update_pos()
-        self.parent().plt.addItem(self)
+        self.handler=handler
+        self.is_draw=self.handler.is_draw
+        self.place=place 
+        self.set_props()
 
-        self.parent().plt.scene().sigMouseClicked.connect(self.mouse_clicked)
-        self.parent().sigRegionChanged.connect(self.update_pos)
-        self.parent().sigPropsUpdated.connect(self.set_props)
-        self.parent().sigRemoval.connect(self.removal)
 
-    def update_pos(self):
-        try:
-            pstate=self.parent().getState()
-            ppos=pstate['pos']
-            ppoint=pstate['points'][self.place]
-            label_pos=ppoint+ppos
-            self.setPos(label_pos)
-        except Exception:
-            pass      
-    
-    def mouse_clicked(self,ev):
-        if self.isUnderMouse():
-            if ev.button()==QtCore.Qt.MouseButton.LeftButton:
-                self.parent().set_selected(not self.parent().translatable)
-            elif ev.button()==QtCore.Qt.MouseButton.RightButton:
-                self.parent().right_clicked(ev,valid=True)
-    
-    def hoverEvent(self,ev): #to ensure no unselection of the parent roi
+    def mouseDragEvent(self, ev):
+        if not self.handler.frozen:
+            if ev.button() == QtCore.Qt.MouseButton.LeftButton:
+                if ev.isStart():
+                    self.moving = True
+                    self.cursorOffset = self.pos() - self.mapToParent(ev.buttonDownPos())
+                    self.startPosition = self.pos()
+                ev.accept()
+
+                if not self.moving:
+                    return
+
+                self.setPos(self.cursorOffset + self.mapToParent(ev.pos()))
+                if ev.isFinish():
+                    self.moving = False
+                    xy=self.cursorOffset + self.mapToParent(ev.pos())
+                    
+                    # similar to mouse_update in ROIs,=> force=False 
+                    # used to update dts in dtcords
+                    update_dtc=dtCords.make(self.handler.clicks).set_cord(self.place,dtPoint(None,*xy))
+                    self.handler.set_dtc(update_dtc) 
+
+    # makes self hoverable and ensures that self.is_draw propogates to plt.mouse_clicked
+    # for selection/deselection purposes
+    def hoverEvent(self,ev):
         pass
 
-    def set_props(self,labeldict,props):
-        txt=labeldict[props['style']][self.place]
-        self.setHtml('<div style="font-size: {}pt;">{}</div>'.format(props['fontsize'],txt))
-        if props['color'] is not None:
-            self.setColor(props['color'])
-
-    def removal(self):
-        self.parent().plt.scene().sigMouseClicked.disconnect(self.mouse_clicked)
-        self.parent().sigRegionChanged.disconnect(self.update_pos)
-        self.parent().sigPropsUpdated.disconnect(self.set_props)
-        self.parent().sigRemoval.disconnect(self.removal)
-        self.parent().plt.removeItem(self)
-
-class DrawElliottImpulse(drws.DrawItem,drws.AltPolyLine):
-    sigRemoval=QtCore.Signal()
-    sigPropsUpdated=QtCore.Signal(object,object)
+    def set_props(self):
+        h=self.handler
+        txt=self.handler.labeldict[h.degree][self.place]
+        self.setHtml('<div style="font-size: {}pt;">{}</div>'.format(h.fontsize,txt))
+        if h.color is not None:
+            self.setColor(h.color)
     
-    def __init__(self, plt,coords=chtl.zero2P(),clicks=5,dialog=uitools.ElliottPropDialog,
-        labeldict=cfg.ELLIOTT_IMPULSE,ellstyle=cfg.D_EISTYLE,**kwargs):
-        props=dict(width=1,color=None,style=ellstyle,fontsize=cfg.D_ELSIZE)
-        super().__init__(plt,clicks=clicks,dialog=dialog,props=props,**kwargs)
-        super(drws.DrawItem,self).__init__(coords)
-        self.initialisation()
-        transparent=QtGui.QColor(QtCore.Qt.transparent)
-        self.setPen(color=transparent)
-        self.hoverPen.setColor(transparent)
-        self.setZValue(-10)
-        self.hsz=cfg.D_ELSIZE
-        self.labeldict=labeldict
-        self.is_draw=False #to exclude the body of the roi from valid selectable areas and leave only the segments as such areas
-        self.labels=[]
-        if self.is_new:
-            self.set_label(0)
+    def set_selected(self,s):
+        if s:
+            self.border=fn.mkPen(self.color)
+            self.update()
         else:
-            for i in range(self.clicks):
-                self.set_label(i)
+            self.border=fn.mkPen(None)
+            self.update()
+
+class DrawElliottImpulse(QGraphicsItem,drws.DrawProps):
+    multiclick=True
+    def __init__(self, plt, xy=None, dockplt=None, caller=None, labeldict=cfg.ELLIOTT_IMPULSE, 
+                 degree=cfg.D_EIDEGREE,fontsize=cfg.D_ELSIZE, dialog=uitools.ElliottPropDialog):
+        super().__init__()
+        self.config_props(plt.mwindow,caller=caller)
+        self.plt=plt if dockplt is None else dockplt
+        self.timeseries=self.plt.chartitem.timeseries
+        self.dialog=dialog
+        self.labels=[]
         
-        self.mouseClickEvent=lambda *args: None
-        self.left_clicked=lambda *args: None
-        self.mouseDragEvent=lambda *args: None
+        self.labeldict=labeldict
+        if not self.degree: self.degree=degree
+        if not self.fontsize: self.fontsize=fontsize
+        if not self.frozen: self.frozen=False
+        
+        self.clicks=len(self.labeldict[self.degree])
+        self.frozen=False
+        self.context_menu=self.create_menu()
+
+        self._dtc=dtCords.make(self.clicks).apply(dtPoint(ts=self.timeseries))
+
+        self.plt.addItem(self)
+
+        # add first label initiated by mouse clicks, and connect to mouse click processor
+        if xy:
+            self.add_label(xy[0])
+            self.plt.scene().sigMouseClicked.connect(self.setup_mouseclicks)
+        
+        # fill up all labels if restored from a saved file
+        else:
+            for _ in range(self.clicks):
+                self.add_label()
+            self.plt.scene().sigMouseClicked.connect(self.mouse_clicked)
+        
+        self.plt.sigTimeseriesChanged.connect(self.ts_change)
+
+
+    @property
+    def rawdtc(self):
+        endpoints=[]
+        for label in self.labels:
+            endpoints.append(dtPoint(None,*label.pos()))
+        return dtCords(endpoints)
     
     @property
     def fontsize(self):
-        return self.props['fontsize']
+        return self.props.get('fontsize',None)
     
     @fontsize.setter
     def fontsize(self,x):
         self.props['fontsize']=x
 
-    def set_label(self,count):
-        label=self.labeldict[self.style][count]
-        litem=_DrawElliottLabel(text=label,parent=self,place=count)
-        self.set_props(self.props)
-        self.labels.append(litem)
+    @property
+    def degree(self):
+        return self.props.get('degree',None)
+    
+    @degree.setter
+    def degree(self,x):
+        self.props['degree']=x
+    
+    @property
+    def frozen(self):
+        return self.props.get('frozen',None)
+    
+    @frozen.setter
+    def frozen(self,x):
+        self.props['frozen']=x
 
-    def setup_mouseclicks(self, mouseClickEvent):
-        self.set_label(self.click_count)
-        xy=Point(self.plt.vb.mapSceneToView(mouseClickEvent.scenePos()))
-        self.click_count+=1
-        if self.click_count<self.clicks:
-            self.xy.append(xy)
-            self.write_state()
-            self.setState(self.state)
-        else:
-            self.write_state()
-            self.setState(self.state)
-            self.xy_ticks_to_times()
+    @property
+    def is_selected(self):
+        if len(self.labels)==0:
+            return False
+        
+        if self.labels[0].border.style()==QtGui.Qt.PenStyle.NoPen:
+            return False
+        else: 
+            return True
+    
+
+    def setup_mouseclicks(self,ev):
+    
+        if ev.button()==QtCore.Qt.MouseButton.LeftButton:
+            xy=self.plt.mapped_xy
+            self.add_label(xy)
+
+        if len(self.labels)>=self.clicks:
             self.plt.scene().sigMouseClicked.disconnect(self.setup_mouseclicks)
+            self.plt.scene().sigMouseClicked.connect(self.mouse_clicked)
+            
+            return
+
+    def mouse_clicked(self,ev):
+
+        if self.shape().contains(ev.pos()):
+            if ev.button()==QtCore.Qt.MouseButton.RightButton:
+                self.right_clicked(ev)
+            elif ev.button()==QtCore.Qt.MouseButton.LeftButton:
+                self.set_selected(not self.is_selected)
+
+    def set_dtc(self, dtc, force=False):
+        
+        update_pos=drws.DrawItem.set_dtc(self,dtc,force=force)
+        
+        if update_pos:
+            points=self._dtc.get_raw_points()
+            for i,label in enumerate(self.labels):
+                label.setPos(*points[i])
+
+        return update_pos
+
+    def get_dtc(self):
+        return self.rawdtc.fillnone(self._dtc)
+    
+    def save_dtc(self):
+        return self.get_dtc().rollout()
+
+    def add_label(self,xy=None):
+        self.labels.append(_DrawElliottLabel(handler=self,place=len(self.labels)))
+        if xy: # works on mouse click setup
+            update_dtc=dtCords.make(n=self.clicks).set_cord(len(self.labels)-1,dtPoint(None,*xy))
+            self.set_dtc(update_dtc, force=True)
+        self.plt.addItem(self.labels[-1])
+
+    def set_selected(self,s):
+        for label in self.labels:
+            label.set_selected(s)
+    
+    def create_menu(self):
+        context_menu=QtWidgets.QMenu()
+        self.freeze_act=context_menu.addAction('Freeze')
+        self.freeze_act.setCheckable(True)
+        self.prop_act=context_menu.addAction('Properties')
+        self.pushdown_act=context_menu.addAction('Push down')
+        self.liftup_act=context_menu.addAction('Lift up')
+        context_menu.addSeparator()
+        self.rem_act=context_menu.addAction('Remove')
+        self.update_menu()
+        return context_menu
+
+    def update_menu(self):
+        self.freeze_act.setChecked(True) if self.frozen else self.freeze_act.setChecked(False)
+
+    def right_clicked(self,ev,**kwargs):
+        ev_pos=ev.screenPos()
+        self.maction=self.context_menu.exec(QtCore.QPoint(ev_pos.x(),ev_pos.y()))
+        if self.maction==self.rem_act:
+            self.removal()
+            return
+        elif self.maction==self.prop_act:
+            self.dialog(self.plt,item=self,**kwargs)
+        elif self.maction==self.freeze_act:
+            self.freezing()
+        elif self.maction==self.pushdown_act:
+            zv=self.zValue()
+            self.setZValue(zv-1)
+        elif self.maction==self.liftup_act:
+            zv=self.zValue()
+            self.setZValue(zv+1)
+
+    def freezing(self):
+        self.frozen=not self.frozen
+        return not self.frozen
+    
+    def ts_change(self,ts):
+        self.timeseries=ts
+        self.set_dtc(dtPoint(ts=ts))
 
     def set_props(self, props):#full override
         for key in props:
             self.props[key]=props[key]
         if self.is_persistent and self.caller!='open_subw':
             self.mwindow.props[self.__module__+'.'+type(self).__name__]=self.get_props()
-        self.sigPropsUpdated.emit(self.labeldict,props)
-    
-    def left_clicked(self, ev):
-        return super(drws.DrawItem,self).left_clicked(ev)
 
-    def right_clicked(self, ev, valid=False):
-        if valid==True:
-            return super().right_clicked(ev)
+        for label in self.labels:
+            label.set_props()
+            # Ensure that the border is changed if the item is selected
+            if label.border.style()!=QtGui.Qt.PenStyle.NoPen:
+                label.border=fn.mkPen(self.color)
+                label.update()
+        
+        self.update_menu()
+
+        return
+
+    def paint(self, p, *args):
+        pass
     
-    def ts_change(self, ts):
-        super().ts_change(ts)
-        self.setSelected(self.selected)
+    def boundingRect(self):
+        return QtCore.QRectF()
+
+    def shape(self):
+        # Create a QPainterPath that includes the shapes of all text items
+        path = QtGui.QPainterPath()
+        for label in self.labels:
+            label_shape = label.shape()
+            # Transform the shape of the text item to the coordinate system of the mouse
+            transformed_shape = label.mapToDevice(label_shape)
+            path.addPath(transformed_shape)
+        return path
+
+    #override
+    def item_hide(self, **kwargs):
+        for label in self.labels:
+            label.hide()
+        self.is_persistent=False
+        self.hide()
     
+    #override
+    def item_show(self, **kwargs):
+        for label in self.labels:
+            label.show()
+        self.is_persistent=True
+        self.show()
+
+
     def removal(self):
-        self.sigRemoval.emit()
-        return super().removal()
+        self.plt.scene().sigMouseClicked.disconnect(self.mouse_clicked)
+        self.plt.sigTimeseriesChanged.disconnect(self.ts_change)
+        for label in self.labels:
+            self.plt.removeItem(label)
+        self.plt.removeItem(self)
 
 class EC_Dialog(uitools.ElliottPropDialog):
-    labeldict=cfg.ELLIOTT_CORRECTION
+    
     initials=dict(uitools.ElliottPropDialog.initials)
-    initials['style']=cfg.D_ECSTYLE
+    initials['degree']=degree=cfg.D_ECDEGREE
     def __init__(self, *args,**kwargs):
-        super().__init__(*args,title='Elliott Correction',**kwargs)
+        super().__init__(*args,title='Elliott Correction',labeldict=cfg.ELLIOTT_CORRECTION,**kwargs)
 
 class DrawElliottCorrection(DrawElliottImpulse):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, clicks=3, dialog=EC_Dialog,labeldict=cfg.ELLIOTT_CORRECTION,
-            ellstyle=cfg.D_ECSTYLE,**kwargs)
+        super().__init__(*args, dialog=EC_Dialog,labeldict=cfg.ELLIOTT_CORRECTION,
+            degree=cfg.D_ECDEGREE,**kwargs)
 
 class EEC_Dialog(uitools.ElliottPropDialog):
-    labeldict=cfg.ELLIOTT_EXTENDED_CORRECTION
     initials=dict(uitools.ElliottPropDialog.initials)
-    initials['style']=cfg.D_EECSTYLE
+    initials['degree']=degree=cfg.D_EECDEGREE
     def __init__(self, *args,**kwargs):
-        super().__init__(*args,title='Elliott Extended Correction',**kwargs)
+        super().__init__(*args,title='Elliott Extended Correction',labeldict=cfg.ELLIOTT_EXTENDED_CORRECTION,**kwargs)
 
 class DrawElliottExtendedCorrection(DrawElliottImpulse):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, dialog=EEC_Dialog,labeldict=cfg.ELLIOTT_EXTENDED_CORRECTION,
-            ellstyle=cfg.D_EECSTYLE,**kwargs)
+            degree=cfg.D_EECDEGREE,**kwargs)
 
 class DrawText(TextItem):
     props=dict(text='Text',font=None,fontsize=None,color=None,anchX=0.5,anchY=0.5,italic=False,bold=False)
@@ -183,12 +334,13 @@ class DrawText(TextItem):
         self.text=text
         self.set_text(self.text) #to process snippets
         self.set_anchor()
-        self.xy=Point(0,0)
-        self.dtxy=[0,0]
         self.dialog=dialog
         self.context_menu=self.create_menu()
         self.is_new=False
         self.caller=caller
+
+        self._dtp=dtPoint(ts=self.ts)
+
         if self.caller=='click_action':#fast way to setup the first drawing by mouse clicks
             self.is_new=True
             self.set_props(self.props)
@@ -301,16 +453,6 @@ class DrawText(TextItem):
         else: #to discard api and other class props
             d={}
             d=a
-
-    def xy_ticks_to_times(self):
-        self.dtxy[0]=chtl.ticks_to_times(self.ts,self.xy[0])
-        self.dtxy[1]=self.xy[1]
-        return self.dtxy
-
-    def xy_times_to_ticks(self):
-        self.xy[0]=chtl.times_to_ticks(self.ts,self.dtxy[0])
-        self.xy[1]=self.dtxy[1]
-        return self.xy
         
     def setup_mouseclick(self,ev):
         pitm=ev.currentItem.parentItem()
@@ -325,9 +467,10 @@ class DrawText(TextItem):
             self.plt=dkplt
             self.plt.sigTimeseriesChanged.connect(self.ts_change)
         self.set_text(self.text)
-        self.xy=self.plt.mapped_xy
-        self.xy_ticks_to_times()
-        self.setPos(self.xy)
+        xy=self.plt.mapped_xy
+        
+        self._set_dtc(dtPoint(None,*xy),force=True)
+        
         for dk in self.plt.subwindow.docks:
             dkplt=dk.widgets[0]
             dkplt.scene().sigMouseClicked.disconnect(self.setup_mouseclick)
@@ -368,8 +511,13 @@ class DrawText(TextItem):
                 self.setPos(self.cursorOffset + self.mapToParent(ev.pos()))
                 if ev.isFinish():
                     self.moving = False
-                    self.xy=self.cursorOffset + self.mapToParent(ev.pos())
-                    self.xy_ticks_to_times()
+                    xy=self.cursorOffset + self.mapToParent(ev.pos())
+                    
+                    # similar to mouse_update in ROIs,=> force=False 
+                    # used to update dts in dtcords
+                    update_dtp=dtPoint(None,*xy)
+                    self._set_dtc(update_dtp) 
+
 
     def right_clicked(self,ev,**kwargs):
         ev_pos=ev.screenPos()
@@ -452,26 +600,37 @@ class DrawText(TextItem):
 
         self.font=self.font.family()
 
-    def setState(self,state):
-        self.xy=state
-        self.setPos(*state)
-    
-    def saveState(self):
-        return [self.xy[0],self.xy[1]]
-    
-    def set_dt(self,dt):
-        self.dtxy=dt
-        self.xy_times_to_ticks()
-        self.setState(self.xy)
+    # Similar to AltInfiniteLine set_dtc with the exception of setPos(float,float)
+    def _set_dtc(self,dtpos, force=False):
 
-    def save_dt(self):
-        self.xy_ticks_to_times()
-        return self.dtxy
+        c=dtpos if type(dtpos) == dtPoint else dtPoint(*dtpos)
+            
+        self._dtp=self._dtp.apply(c) #update dtc
+
+        # dont setPos solely based on getPos coords unless explicitly forced
+        # to avoid idle setPos eg. on mouse_updates
+        update_pos=(c.dt is not None or c.ts is not None) or force
+        if update_pos:  
+            self.setPos(self._dtp.x,self._dtp.y)
+
+        return update_pos
+
+    # Help DrawLabel override
+    def set_dtc(self,*args,**kwargs):
+        return self._set_dtc(*args,**kwargs)      
+
+    def get_dtc(self):
+
+        c=dtPoint(None,*self.pos()).fillnone(self._dtp) # sets dt from self._dtp instead of None
+        
+        return c
+
+    def save_dtc(self):
+        return self.get_dtc().rollout()
 
     def ts_change(self,ts):
-        self.ts=ts
-        self.xy_times_to_ticks()
-        self.setPos(*self.xy)
+        self.timeseries=ts
+        self.set_dtc(dtPoint(ts=ts))
         self.setText(self.text) #snippets processing
         self.set_fontsize(self.fontsize)
 
@@ -546,8 +705,6 @@ class DrawLabel(DrawText):
         self.state=[None,None]
         self.ax=self.plt.getAxis('bottom')
         self.ay=self.plt.getAxis('right')
-        self.xy_ticks_to_times=lambda *args,**kwargs: None
-        self.xy_times_to_ticks=lambda *args,**kwargs: None
 
         if self.is_new==False:
             self.plt.vb.sigStateChanged.connect(self.refresh)
@@ -599,10 +756,10 @@ class DrawLabel(DrawText):
     def saveState(self):
         return [self.state.x(),self.state.y()]
     
-    def set_dt(self,state):
+    def set_dtc(self,state):
         return self.setState(state)
     
-    def save_dt(self):
+    def save_dtc(self):
         return self.saveState()
     
     def ts_change(self, ts):

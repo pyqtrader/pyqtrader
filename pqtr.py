@@ -570,13 +570,13 @@ class MDIWindow(QtWidgets.QMainWindow):
         title='Empty profile bin'
         idle_message=lambda *args: uitools.simple_message_box(title=title,text=f'Nothing to do, profile {cfg.DELETED_PROFILE} is already empty',
                     icon=QtWidgets.QMessageBox.Information)
-        todo=False
+        toperform=False
         for record in self.pstate:
             if 'subwindow profiles' in record:
                 if cfg.DELETED_PROFILE in record['subwindow profiles']:
-                    todo=True
+                    toperform=True
                     break
-        if todo==False or (self.profiles[0]==cfg.DELETED_PROFILE and self.mdi.subWindowList()==[]):
+        if toperform==False or (self.profiles[0]==cfg.DELETED_PROFILE and self.mdi.subWindowList()==[]):
             idle_message()
             return
 
@@ -682,14 +682,11 @@ class MDIWindow(QtWidgets.QMainWindow):
                                         istate=dict()
                                         istate['dock']=int(dk.title())
                                         istate['itype']=imodule+'.'+itype
-                                        try: istate['dt']=item.save_dt() #store datetime data where applicable
-                                        except Exception:pass
-                                        try: istate['iprops']=dict(item.save_props())
-                                        except Exception: pass
-                                        # try:
-                                        #     istate['istate']= item.saveState()
-                                        # except Exception:
-                                        #     istate['istate']=None
+                                        if hasattr(item,"save_dtc"):
+                                            istate['dt']=item.save_dtc() #store datetime data where applicable
+                                        if hasattr(item,"save_props"):
+                                            istate['iprops']=dict(item.save_props())
+                                        
                                         item_states.append(istate)
                                 except Exception:
                                     pass
@@ -774,12 +771,11 @@ class MDIWindow(QtWidgets.QMainWindow):
                                 caller='open_subw')
                         if item not in dockplt.listItems():
                             dockplt.addItem(item)
-                        # item.setState(ist['istate'])
 
-                        try:item.set_dt(ist['dt']) #read datetime data where applicable
-                        except Exception: pass
-                        try: item.set_props(ist['iprops'])
-                        except Exception:pass
+                        if hasattr(item,"set_dtc"):
+                            item.set_dtc(ist.get('dt',[None])) #read datetime data where applicable
+                        if hasattr(item,"set_props"):
+                            item.set_props(ist.get('iprops',None))
 
                         if isinstance(item,drws.DrawItem):
                             item.set_selected(False)

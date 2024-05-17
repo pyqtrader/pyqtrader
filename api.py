@@ -7,6 +7,7 @@ from pyqtgraph import Point,TextItem
 
 import charttools as chtl, charttools
 import cfg,timeseries,studies,labelings, drawings 
+from timeseries import dtPoint, dtCords
 from _debugger import _print,_p,_printcallers,_c,_pc
 from uitools import simple_message_box
 
@@ -173,6 +174,7 @@ class apiBase:
 
     def removal(self):
         self.deinitf()
+        self.sigSeriesChanged.disconnect()
         return super().removal()
         
 class _apiItem:
@@ -189,10 +191,23 @@ class _apiItem:
     
     #api function
     def set_data(self,vls):
-        return super().set_dt(vls)
+        if type(vls) in (tuple,list):    
+            if type(vls[0]) in (tuple,list,Point):
+                a=dtCords([dtPoint(v[0],None,v[1]) for v in vls])
+            else:
+                a=dtPoint(vls[0],None,vls[1])
+        else:
+            a=dtPoint(vls,None,None) # vline
+        return super().set_dtc(a)
     
     def get_data(self):
-        return super().save_dt()
+        data=super().get_dtc()
+        if isinstance(data, dtPoint):
+            return [data.x,data.y]
+        elif isinstance(data, dtCords):
+            return data.get_slice(slice(1,None,2)) # [dt,y] slice
+        else:
+            raise TypeError("Unknown data type")
 
     #api function
     def set_properties(self,**props):
@@ -209,9 +224,17 @@ class apiText(_apiItem,labelings.DrawText):
         self.set_frozen(frozen)
         self.set_persistent(persistent)
         self.dockplt=plt.subwindow.docks[window].widgets[0]
-        self.metaprops={} #get rid of decorator
-        self.set_dt(list(values))
+        self.metaprops={} # reset
+        self.set_dtc(dtPoint(values[0],None,values[1]))
 
+    def ts_change(self,ts):
+        try:
+            return super().ts_change(ts)
+        except IndexError:
+            self.timeseries=ts
+            # workaround off-market datetimes error, eg. W1 change to H4
+            self.set_dtc(dtPoint.zero().apply(dtPoint(ts=ts)))
+    
 class apiLabel(_apiItem, labelings.DrawLabel):
     props=dict(labelings.DrawLabel.props) #to break connection to other DrawLabel subclasses
     def __init__(self,plt,window=0,frozen=False,persistent=True,**kwargs):
@@ -219,7 +242,7 @@ class apiLabel(_apiItem, labelings.DrawLabel):
         self.dockplt=plt.subwindow.docks[window].widgets[0]
         self.set_frozen(frozen)
         self.set_persistent(persistent)
-        self.metaprops={} #get rid of decorator
+        self.metaprops={} # reset
         self.set_bind()
         self.set_anchor(0,0.25)
         self.setState(Point(0,0))
@@ -548,6 +571,7 @@ def api_noncurve_study_factory(base):
         #overrides parent class ts_change, works for drawings.  Labelings should override
         def ts_change(self,ts):
             self.timeseries=ts
+            self.set_dtc(dtPoint(ts=ts))
             self.replot()
             self.plt.lc_thread.sigLastCandleUpdated.connect(self.replot)
             self.plt.lc_thread.sigInterimCandlesUpdated.connect(self.replot)

@@ -2,7 +2,7 @@ from PySide6 import QtCore
 
 PROGRAM_NAME='pyqtrader'
 
-VERSION='1.1'
+VERSION='1.2'
 
 DYNAMIC_QUERYING=True #continuous updating from the data provider, set False to turn off (no QTimer initiation) 
 
@@ -79,7 +79,7 @@ def tf_to_label(tf):
 D_TFLABEL=tf_to_label(D_TIMEFRAME)
 
 CHARTTYPES=('Bar','Candle','Line')
-D_CHARTTYPE='Candle'
+D_CHARTTYPE='Bar'
 
 #Timeseries names
 TICKS='i'
@@ -171,21 +171,21 @@ FIBOCOLOR='#ffffff'
 FIBOSTYLE=DOTLINE
 
 D_ELSIZE=10
-D_EISTYLE='1 2 3 4 5'
+D_EIDEGREE='1 2 3 4 5'
 ELLIOTT_IMPULSE={
     '(I) (II) (III) (IV) (V)' : ['(I)', '(II)', '(III)', '(IV)', '(V)'], 
     'I) II) III) IV) V)' : ['I)', 'II)', 'III)', 'IV)', 'V)'],
     'I II III IV V' : ['I', 'II', 'III', 'IV', 'V'],
     u'\u2780 \u2781 \u2782 \u2783 \u2784' : [u'\u2780',u'\u2781',u'\u2782',u'\u2783',u'\u2784'],
     '(1) (2) (3) (4) (5)':['(1)','(2)','(3)','(4)','(5)'],'1) 2) 3) 4) 5)':['1)','2)','3)','4)','5)'],
-    D_EISTYLE :['1','2','3','4','5'],'(i) (ii) (iii) (iv) (v)':['(i)','(ii)','(iii)','(iv)','(v)'],
+    D_EIDEGREE :['1','2','3','4','5'],'(i) (ii) (iii) (iv) (v)':['(i)','(ii)','(iii)','(iv)','(v)'],
     'i) ii) iii) iv) v)':['i)','ii)','iii)','iv)','v)'], 'i ii iii iv v':['i','ii','iii','iv','v'],
     }
 
-D_ECSTYLE='A B C'
+D_ECDEGREE='A B C'
 ELLIOTT_CORRECTION={
     u'\u24B6 \u24B7 \u24B8' : ['\u24B6', '\u24B7', '\u24B8'],
-    '(A) (B) (C)' : ['(A)','(B)','(C)'], 'A) B) C)' : ['A)','B)','C)'], D_ECSTYLE : ['A','B','C'],
+    '(A) (B) (C)' : ['(A)','(B)','(C)'], 'A) B) C)' : ['A)','B)','C)'], D_ECDEGREE : ['A','B','C'],
     u'\u24D0 \u24D1 \u24D2' : ['\u24D0', '\u24D1', '\u24D2'],
     '(a) (b) (c)' : ['(a)','(b)','(c)'], 'a) b) c)' : ['a)','b)','c)'], 'a b c' : ['a','b','c'],
     u'\u24CC \u24CD \u24CE' : ['\u24CC', '\u24CD', '\u24CE'],
@@ -195,12 +195,12 @@ ELLIOTT_CORRECTION={
     'S H S' : ['S','H','S']
     }
 
-D_EECSTYLE='A B C D E'
+D_EECDEGREE='A B C D E'
 ELLIOTT_EXTENDED_CORRECTION={
     u'\u24B6 \u24B7 \u24B8 \u24B9 \u24BA' : ['\u24B6', '\u24B7', '\u24B8','\u24B9','\u24BA'],
     '(A) (B) (C) (D) (E)' : ['(A)','(B)','(C)','(D)','(E)'], 
     'A) B) C) D) E)' : ['A)','B)','C)','D)','E)'], 
-    D_EECSTYLE : ['A','B','C', 'D','E'],
+    D_EECDEGREE : ['A','B','C', 'D','E'],
     u'\u24D0 \u24D1 \u24D2 \u24D3 \u24D4' : ['\u24D0', '\u24D1', '\u24D2', '\u24D3','\u24D4'],
     '(a) (b) (c) (d) (e)' : ['(a)','(b)','(c)','(d)','(e)'], 
     'a) b) c) d) e)' : ['a)','b)','c)','d)','e)'], 'a b c d e' : ['a','b','c','d','e'],

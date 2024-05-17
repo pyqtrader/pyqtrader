@@ -125,16 +125,16 @@ class PropDialog(QtWidgets.QDialog):
                 
         if item is not None:
             for att in ('width','color','shift'):
-                try: #width, color or shift attr may be absent in specific classes
+                if hasattr(item,att): #width, color or shift attr may be absent in specific classes
                     setattr(self.__class__,att,getattr(item,att))
-                except Exception:
-                    pass
             if chtl.item_is_study(item):
                 for key in item.funkvars:
                     setattr(self.__class__,key,item.funkvars[key])
         super().__init__()
         self.plt=plt
         self.item=item
+        if item and hasattr(item,"menu_name") and item.menu_name:
+            self.setWindowTitle(item.menu_name)
         self.ItemType=ItemType
         if ts is None:
             try:
@@ -208,8 +208,8 @@ class PropDialog(QtWidgets.QDialog):
         if self.props_on['mode']==True:
             self.modebox.setCurrentText(cfg.D_STUDYMODE if self.__class__.mode is None else self.__class__.mode)
         if self.props_on['color']==True:
-            self.clrbtn.setStyleSheet(f"background-color: {self.__class__.color}")
-    
+            self.clrbtn.setStyleSheet(f"background-color: {chtl.pgclr_to_hex(self.__class__.color)}")
+                
     def reset_defaults(self):
         for key in self.__class__.initials:
             setattr(self.__class__,key,self.__class__.initials[key])
@@ -474,12 +474,15 @@ class TabsDialog(QtWidgets.QDialog):
     def __init__(self,PropD,*args,ItemType=None, wname=None,item=None, preset_levels=None,
         level_props=None,**kwargs):
         super().__init__()
+        self.item=item
+        if item and hasattr(item,"menu_name") and item.menu_name:
+            self.setWindowTitle(item.menu_name)
+        # Overrides item menu_name if set
         if wname is not None:
             self.setWindowTitle(wname)
         self.properties=PropD(*args,item=item,**kwargs)
         self.plt=self.properties.plt
         self.ts=self.properties.ts
-        self.item=item
         self.ItemType=ItemType
         if level_props is None:
             self.level_props=self.__class__.level_props
@@ -531,22 +534,21 @@ class TabsDialog(QtWidgets.QDialog):
 
 class ElliottPropDialog(PropDialog):
     initials=dict(PropDialog.initials)
-    initials['style']=style=cfg.D_EISTYLE
+    initials['degree']=degree=cfg.D_EIDEGREE
     initials['fontsize']=fontsize=cfg.D_ELSIZE
     initials['color']=color=cfg.D_COLOR
-    initials['labeldict']=labeldict=cfg.ELLIOTT_IMPULSE
-    def __init__(self,*args,style_on=True,exec_on=True,title='Elliott Impulse',**kwargs):
+    def __init__(self,*args,style_on=True,exec_on=True,title='Elliott Impulse', labeldict=cfg.ELLIOTT_IMPULSE, **kwargs):
         props_on=dict(period=False,width=False)
         super().__init__(*args,props_on=props_on,order=2,**kwargs)
         self.setWindowTitle(title)
-        self.state_dict['style']=self.__class__.style=self.item.style
+        self.state_dict['degree']=self.__class__.degree=self.item.degree
         self.state_dict['fontsize']=self.__class__.fontsize=self.item.fontsize
-        self.state_dict['labeldict']=self.__class__.labeldict=self.item.labeldict
+        self.labeldict=labeldict
 
-        label0=QtWidgets.QLabel('Style: ')
+        label0=QtWidgets.QLabel('Degree: ')
         self.stylebox=QtWidgets.QComboBox()
         self.stylebox.insertItems(1,chtl.dict_to_keys(self.labeldict))
-        self.stylebox.setCurrentText(self.__class__.style)
+        self.stylebox.setCurrentText(self.__class__.degree)
 
         label1=QtWidgets.QLabel('Size: ')
         self.sizebox=QtWidgets.QSpinBox()
@@ -557,7 +559,7 @@ class ElliottPropDialog(PropDialog):
         if style_on==True:
             self.layout.addWidget(label0,self.order,0)
             self.layout.addWidget(self.stylebox,self.order,1)
-            self.stylebox.currentTextChanged.connect(lambda *args: setattr(self.__class__,'style',self.stylebox.currentText()))
+            self.stylebox.currentTextChanged.connect(lambda *args: setattr(self.__class__,'degree',self.stylebox.currentText()))
             self.order+=1
         self.layout.addWidget(label1,self.order,0)
         self.layout.addWidget(self.sizebox,self.order,1)
@@ -571,7 +573,7 @@ class ElliottPropDialog(PropDialog):
     
     def set_values(self):
         try:
-            self.stylebox.setCurrentText(cfg.D_EISTYLE if self.__class__.style is None else self.__class__.style)
+            self.stylebox.setCurrentText(cfg.D_EISTYLE if self.__class__.degree is None else self.__class__.degree)
         except Exception:
             pass
         try:

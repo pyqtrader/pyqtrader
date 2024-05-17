@@ -1,7 +1,7 @@
 # import sys
 # import json
 import dateutil.parser as dp
-from datetime import datetime
+from datetime import datetime, timezone
 
 import json
 import requests
@@ -1204,7 +1204,7 @@ def output(_from,_to,gran, instr):
             ctime = candle.get('time')[0:19]
             try:
                 nowt=datetime.now().timestamp()
-                offset=(datetime.fromtimestamp(nowt) - datetime.utcfromtimestamp(nowt)).total_seconds()
+                offset=(datetime.fromtimestamp(nowt) - datetime.fromtimestamp(nowt,tz=timezone.utc)).total_seconds()
                 rec = "{time},{o},{h},{l},{c}".format(
                     time=int(dp.parse(ctime).timestamp()+offset),
                     o=candle['mid']['o'],
