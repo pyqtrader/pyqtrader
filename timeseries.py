@@ -270,8 +270,6 @@ class dtPoint:
         y=o(self.y)-o(other.y)
         return x,y
              
-    # The function caches self.dt and returns self.x/self.y for position update if * is used;
-    # also sets ts if given by other and updates x value correspondingly
 
     def _ti(self,dt):
         return chtl.times_to_ticks(self.ts,dt) if self.ts is not None else None
@@ -279,8 +277,8 @@ class dtPoint:
     def _it(self,x):
         return chtl.ticks_to_times(self.ts,x) if self.ts is not None else None
 
-    # Fills None attributes in 'self' with values from 'other' if % sign is used.
-    # Used primarily to fill in dt attribute
+    # The function caches self.dt and returns self.x,self.y for position update;
+    # also sets ts if given by 'other' and updates x value correspondingly
     def apply(self,other):
         
         # dt(times) and x(ticks) definitions:
@@ -310,6 +308,8 @@ class dtPoint:
         # simply refresh if all are None
         return dtPoint(dt,x,y,self.ts)
     
+    # Fills None attributes in 'self' with values from 'other'.
+    # Used primarily to fill in dt attribute
     def fillnone(self, other):
         d=dict()
         for field in ds.fields(self):
