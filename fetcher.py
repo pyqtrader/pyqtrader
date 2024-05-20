@@ -5,8 +5,7 @@ import numpy as np
 from PySide6 import QtCore
 from datetime import datetime as dtm
 from importlib.machinery import SourceFileLoader
-# import data.acct as acct
-import ohist
+
 import cfg
 import charttools as chtl, charttools
 
@@ -39,37 +38,6 @@ oa_dict={
     'W'  : {'tf': 'W1', 'cnt':int(20*cfg.PERIOD_Y1//cfg.PERIOD_W1)},
     'M'  : {'tf': 'MN', 'cnt':int(20*cfg.PERIOD_Y1//cfg.PERIOD_MN)},
 }
-
-def history(tf,symbol, bars=0):
-    a=histparams(tf,symbol, bars=bars)
-    if a is not None:
-        try:
-            filename=ohist.output(*a)
-            df=pd.read_csv(filename)
-            df.drop_duplicates(subset=df.columns[0],inplace=True)
-            df.reset_index(drop=True,inplace=True)
-            df.to_csv(filename,index=False,header=False)
-            return True
-        except ValueError as e:
-            return e
-    else:
-        return False
-
-def histparams(tframe,symbol, bars=0):
-    instrument=symbol[:-3]+'_'+symbol[-3:]
-    grn=tf_to_grn(tframe)
-    count=oa_dict[f'{grn}']['cnt'] if bars==0 else bars+1
-    tf=cfg.TIMEFRAMES[oa_dict[f'{grn}']['tf']]
-    if tf==cfg.PERIOD_W1:
-        tf=(7*tf)/5
-    now=dtm.timestamp(dtm.utcnow())
-    if count is not None:
-        start=dtm.fromtimestamp(now-count*tf).strftime('%Y-%m-%dT%H:%M:%SZ')
-        finish=dtm.fromtimestamp(now-tf).strftime('%Y-%m-%dT%H:%M:%SZ') #to ensure no 'This is in the future' error
-        result=start,finish,grn,instrument
-    else:
-        result=None
-    return result
 
 def tf_to_grn(tf):
     for grn in oa_dict:
@@ -207,3 +175,28 @@ class Fetcher(QtCore.QObject):
         else:
             a=self.fetch_data(session=session,symbol=symbol, count=1,timeframe=timeframe)
             return a
+    
+    def history(self,tf,symbol,session,bars):
+        
+        grn=tf_to_grn(tf)
+        count=oa_dict[f'{grn}']['cnt'] if bars==0 else bars
+        df=pd.DataFrame()
+        tdiff=(7*tf)/5 if tf==cfg.PERIOD_W1 else tf
+       
+        while count>0:
+            batch=min(count,5000)
+            fromdt=df.iloc[0,0]-tdiff*batch if not df.empty else None
+            data=self.fetch_data(session,symbol,fromdt,count=batch,timeframe=tf)
+            interim_df=data['data']
+            if not data['complete']:
+                interim_df=interim_df.iloc[:-1]
+
+            df=pd.concat([interim_df,df])
+            count-=5000
+
+        df.drop_duplicates(subset=df.columns[0],inplace=True)
+        df.reset_index(drop=True,inplace=True)
+        filename=chtl.symbol_to_filename(symbol,cfg.tf_to_label(tf),True)
+        df.to_csv(filename,index=False,header=False)
+
+        return

@@ -1136,6 +1136,8 @@ class HistoryDialog(QtWidgets.QDialog):
     
     def download_history(self):
         plt=self.mwindow.mdi.activeSubWindow().plt
+        fetcher=self.mwindow.fetch
+        session=self.mwindow.session
         symbol=plt.symbol
         checked_timeframes=self._get_checked_timeframes()
         num_bars=self.num_bars_spinbox.value()
@@ -1148,17 +1150,15 @@ class HistoryDialog(QtWidgets.QDialog):
         pbox=ProgressBox(name='History',text='Loading history',max=tflen-1)
         for i,tf in enumerate(checked_timeframes.values()):
             if tf!=cfg.PERIOD_MN:
-                hst=ftch.history(tf,symbol,bars=num_bars)
-                if hst is True:
+                try:
+                    fetcher.history(tf,symbol,session,num_bars)
                     pbox.setValue(i)
                     lbl=cfg.tf_to_label(tf)
                     pbox.setLabelText(f'Loading history: {symbol},{lbl}')
-                elif hst is False:
-                    pass
-                else:
+                except Exception as e:
                     pbox.close()
                     simple_message_box(title=self.title,
-                        text=f'Loading error: check connection and try again: {hst}')
+                        text=f'Loading error: check connection and try again: {repr(e)}')
                     break
         self.mwindow.window_act('Refresh')
         self.close()

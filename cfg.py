@@ -79,7 +79,7 @@ def tf_to_label(tf):
 D_TFLABEL=tf_to_label(D_TIMEFRAME)
 
 CHARTTYPES=('Bar','Candle','Line')
-D_CHARTTYPE='Bar'
+D_CHARTTYPE='Candle'
 
 #Timeseries names
 TICKS='i'
