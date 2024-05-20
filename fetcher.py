@@ -97,6 +97,9 @@ class Fetcher(QtCore.QObject):
     
         if fromdt is None:
             params = dict(count=count,granularity = granularity,smooth=OA_SMOOTH, price=OA_PRICE)
+        elif count is not None:
+            params = {'from' : fromdt, 'count' : count,'granularity': granularity,
+                    'smooth': OA_SMOOTH, 'price':OA_PRICE }
         else:
             todt=dtm.timestamp(dtm.now()) if todt is None else todt
             if(todt-fromdt<0): #interrupt function
