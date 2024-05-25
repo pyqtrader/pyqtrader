@@ -113,6 +113,7 @@
     </property>
     <addaction name="actionUser_Apps"/>
     <addaction name="actionHistory"/>
+    <addaction name="actionBacktest"/>
     <addaction name="actionSettings"/>
    </widget>
    <widget class="QMenu" name="menuEdit">
@@ -878,6 +879,11 @@
    </property>
    <property name="toolTip">
     <string>Draw Ruler</string>
+   </property>
+  </action>
+  <action name="actionBacktest">
+   <property name="text">
+    <string>Backtest..</string>
    </property>
   </action>
  </widget>

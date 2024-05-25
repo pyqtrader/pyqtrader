@@ -79,7 +79,7 @@ def tf_to_label(tf):
 D_TFLABEL=tf_to_label(D_TIMEFRAME)
 
 CHARTTYPES=('Bar','Candle','Line')
-D_CHARTTYPE='Candle'
+D_CHARTTYPE='Bar'
 
 #Timeseries names
 TICKS='i'
@@ -231,7 +231,7 @@ bear='Bearish candle color'
 linecolor='Line color'
 pricelinecolor='Price line color'
 CHARTPROPSCOLORLIST=(background,foreground,graphicscolor,barcolor,framecolor,bull,bear,linecolor,pricelinecolor)
-D_CHARTPROPS={background:'k',foreground:'d', graphicscolor:'w',font: None, fontsize: None, barcolor:'w',
+D_CHARTPROPS={background:'k',foreground:'d', graphicscolor:'w',font: None, fontsize: None, barcolor:'d',
     framecolor:'w',bull:'#00aa7f',bear:'r',linecolor:'d',pricelinecolor:'d'}
 CHARTPROPS={
     'Custom...' : None,
@@ -263,6 +263,17 @@ CONNECTION_MESSAGE='Connected'
 NO_CONNECTION_MESSAGE='No Connection'
 
 COPY_DIST=0.05 #Distance of copied object expressed as share of viewBox range
+
+TRADE_RECORD= dict(
+    id_number='id_number',
+    symbol='symbol',
+    trade_type='trade_type',
+    volume='volume',
+    open_time='open_time',
+    open_price='open_price',
+    close_time='close_time',
+    close_price='close_price'
+)
 
 #Currently not in use, styles.py used instead:
 # LIGHTMODESTYLE=('''

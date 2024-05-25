@@ -6,7 +6,7 @@ from pyqtgraph import Point
 import os, requests, typing
 import numpy as np
 import pandas as pd
-import dataclasses as ds
+import dataclasses as dc
 
 import cfg
 import overrides as ovrd, overrides
@@ -239,7 +239,7 @@ def PlotTimeseries(symbol,ct,tf=None,ts=None,session=None,fetch=None,
     return item
 
 # Used for simple ROIs given by 'pos' and 'size', such as infinite line, ellipse and rectangle
-@ds.dataclass
+@dc.dataclass
 class dtPoint:
     dt: int|None = None
     x:  int|None = None
@@ -248,7 +248,7 @@ class dtPoint:
 
     # Convert int64 args to int to ensure JSON serializability
     def __post_init__(self):
-        for field in ds.fields(self):
+        for field in dc.fields(self):
             value = getattr(self, field.name)
             if isinstance(value, np.int64):
                 setattr(self, field.name, int(value))
@@ -269,8 +269,8 @@ class dtPoint:
         x=o(self.x)-o(other.x)
         y=o(self.y)-o(other.y)
         return x,y
-             
 
+             
     def _ti(self,dt):
         return chtl.times_to_ticks(self.ts,dt) if self.ts is not None else None
 
@@ -303,7 +303,7 @@ class dtPoint:
             self.ts=other.ts
             if dt is not None:
                 x=self._ti(dt)
-        
+
         # returns actionable values for get/setPos()/get/setState(), 
         # simply refresh if all are None
         return dtPoint(dt,x,y,self.ts)
@@ -312,7 +312,7 @@ class dtPoint:
     # Used primarily to fill in dt attribute
     def fillnone(self, other):
         d=dict()
-        for field in ds.fields(self):
+        for field in dc.fields(self):
             value=getattr(self, field.name)
             d[field.name]=value
             if value is None:
@@ -323,6 +323,9 @@ class dtPoint:
     def get_raw_points(self):
         return [self.x,self.y]
 
+    def xy(self):
+        return self.get_raw_points()
+
     def rollout(self):
         return [self.dt,self.x,self.y]
 
@@ -331,10 +334,10 @@ class dtPoint:
         return dtPoint(0,0,0)
 
 #Used for complex ROIs with 2 or more handles/endpoints, such segments, trendlines, channels etc.
-@ds.dataclass
+@dc.dataclass
 class dtCords:
 
-    cords: typing.List[dtPoint]|None=ds.field(default_factory=list) 
+    cords: typing.List[dtPoint]|None=dc.field(default_factory=list) 
 
     # Sets default length to 2
     def __post_init__(self):

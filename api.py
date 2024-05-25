@@ -174,6 +174,8 @@ class apiBase:
 
     def removal(self):
         self.deinitf()
+        # Supress runtime error warning where this signal is not used in the apps code
+        self.sigSeriesChanged.connect(lambda *args: None)
         self.sigSeriesChanged.disconnect()
         return super().removal()
         

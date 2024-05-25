@@ -14,6 +14,7 @@ import uitools
 import studies as stds, studies
 import labelings as lbls,labelings
 import fetcher as ftch,fetcher
+import backtester
 import styles
 from drawings import AltPlotWidget as APW
 
@@ -204,6 +205,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionUser_Apps.triggered.connect(lambda *args: uitools.TreeSubWindow.__call__(self))
         self.ui.actionHistory.triggered.connect(lambda *args: uitools.HistoryDialog.__call__(self))
         self.ui.actionSettings.triggered.connect(lambda *args: uitools.SettingsDialog.__call__(self))
+        self.ui.actionBacktest.triggered.connect(lambda *args: self.window_act("Backtest"))
         #Window
         self.ui.actionTile.triggered.connect(lambda *args: self.window_act("Tile"))
         self.ui.actionCascade.triggered.connect(lambda *args: self.window_act("Cascade"))
@@ -997,7 +999,17 @@ class MDIWindow(QtWidgets.QMainWindow):
                 with open(fname, 'w') as f:
                     f.write(stj)
 
-        
+        if action=='Backtest':
+            import backtester
+            if not os.path.isdir(f'{cfg.FILES_DIR}'):
+                os.mkdir(f'{cfg.FILES_DIR}')
+            fileName = QtWidgets.QFileDialog.getOpenFileName(self,"Load Trade Record", 
+                f"{cfg.FILES_DIR}", f"(*.csv)",
+                options=QtWidgets.QFileDialog.DontUseNativeDialog)
+            fname=fileName[0]
+            if fname!='':
+                plt=self.mdi.activeSubWindow().plt
+                backtester.DrawTradeRecord(plt,fname)
         
         if action in ('Symbol','Description','Timeframe'):
             proceed=True

@@ -8,7 +8,6 @@ from pytz import timezone, UnknownTimeZoneError
 
 import overrides as ovrd,overrides
 import cfg
-from uitools import simple_message_box
 
 from _debugger import _exinfo,_print,_printcallers,_p,_pc,_c,_pp
    
@@ -166,8 +165,16 @@ def pgclr_to_hex(clr):
         res=clr
     return res
 
-from PySide6.QtWidgets import QMessageBox
+from PySide6 import QtWidgets 
 from drawings import CrossHair,PriceLine
+
+def simple_message_box(title=None,text='Notification',icon=None):
+        mbox=QtWidgets.QMessageBox()
+        mbox.setWindowTitle(title)
+        mbox.setText(text)
+        if icon!=None:
+            mbox.setIcon(icon)
+        mbox.exec()
 
 def set_chart(plt,symbol=None,timeframe=None):
     old_item=plt.chartitem
@@ -202,7 +209,7 @@ def set_chart(plt,symbol=None,timeframe=None):
         plt.sigTimeseriesChanged.emit(new_item.timeseries)
         plt.vb.sigResized.emit(plt.vb) #workaround to ensure propogation of AltDateAxisItem data
     except Exception as e:
-        simple_message_box(text=f'Invalid symbol: {e}',icon=QMessageBox.Warning)
+        simple_message_box(text=f'Invalid symbol: {e}',icon=QtWidgets.QMessageBox.Warning)
         #print('Invalid symbol')
 
 def is_linux():
@@ -223,7 +230,7 @@ def string_to_html(text_color='black'):
         return wrapper
     return decorator
 
-#can except both timeframes and timeframe labels
+#can accept both timeframes and timeframe labels
 def symbol_to_filename(s=cfg.D_SYMBOL,tf=cfg.D_TIMEFRAME, fullpath=False):
     if tf not in list(cfg.TIMEFRAMES.keys()):
         try:

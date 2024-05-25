@@ -3,7 +3,7 @@
 ################################################################################
 ## Form generated from reading UI file 'qtd_proto.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.6.0
+## Created by: Qt User Interface Compiler version 6.7.0
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -253,6 +253,8 @@ class Ui_MainWindow(object):
         icon24 = QIcon()
         icon24.addFile(u"Pyqtrader/.system/assets/ruler.png", QSize(), QIcon.Normal, QIcon.Off)
         self.actionDrawRuler.setIcon(icon24)
+        self.actionBacktest = QAction(MainWindow)
+        self.actionBacktest.setObjectName(u"actionBacktest")
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
         self.gridLayout = QGridLayout(self.centralwidget)
@@ -296,25 +298,25 @@ class Ui_MainWindow(object):
         MainWindow.setStatusBar(self.statusbar)
         self.toolBarForAccessories = QToolBar(MainWindow)
         self.toolBarForAccessories.setObjectName(u"toolBarForAccessories")
-        MainWindow.addToolBar(Qt.TopToolBarArea, self.toolBarForAccessories)
+        MainWindow.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBarForAccessories)
         self.toolBarForCharTypes = QToolBar(MainWindow)
         self.toolBarForCharTypes.setObjectName(u"toolBarForCharTypes")
-        MainWindow.addToolBar(Qt.TopToolBarArea, self.toolBarForCharTypes)
+        MainWindow.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBarForCharTypes)
         self.tooBarForExperts = QToolBar(MainWindow)
         self.tooBarForExperts.setObjectName(u"tooBarForExperts")
-        MainWindow.addToolBar(Qt.TopToolBarArea, self.tooBarForExperts)
+        MainWindow.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.tooBarForExperts)
         self.toolBarForTimeframes = QToolBar(MainWindow)
         self.toolBarForTimeframes.setObjectName(u"toolBarForTimeframes")
-        MainWindow.addToolBar(Qt.TopToolBarArea, self.toolBarForTimeframes)
+        MainWindow.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBarForTimeframes)
         self.toolBarForDrawings = QToolBar(MainWindow)
         self.toolBarForDrawings.setObjectName(u"toolBarForDrawings")
-        MainWindow.addToolBar(Qt.TopToolBarArea, self.toolBarForDrawings)
+        MainWindow.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBarForDrawings)
         self.toolBarforElliott = QToolBar(MainWindow)
         self.toolBarforElliott.setObjectName(u"toolBarforElliott")
-        MainWindow.addToolBar(Qt.TopToolBarArea, self.toolBarforElliott)
+        MainWindow.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBarforElliott)
         self.toolBarforPolylines = QToolBar(MainWindow)
         self.toolBarforPolylines.setObjectName(u"toolBarforPolylines")
-        MainWindow.addToolBar(Qt.TopToolBarArea, self.toolBarforPolylines)
+        MainWindow.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBarforPolylines)
 
         self.menubar.addAction(self.menuFile.menuAction())
         self.menubar.addAction(self.menuEdit.menuAction())
@@ -358,6 +360,7 @@ class Ui_MainWindow(object):
         self.menuIndicators.addAction(self.actionStochastic)
         self.menuTools.addAction(self.actionUser_Apps)
         self.menuTools.addAction(self.actionHistory)
+        self.menuTools.addAction(self.actionBacktest)
         self.menuTools.addAction(self.actionSettings)
         self.menuEdit.addAction(self.actionCopy)
         self.menuEdit.addAction(self.actionCopy_Line)
@@ -619,6 +622,7 @@ class Ui_MainWindow(object):
 #if QT_CONFIG(tooltip)
         self.actionDrawRuler.setToolTip(QCoreApplication.translate("MainWindow", u"Draw Ruler", None))
 #endif // QT_CONFIG(tooltip)
+        self.actionBacktest.setText(QCoreApplication.translate("MainWindow", u"Backtest..", None))
         self.menuFile.setTitle(QCoreApplication.translate("MainWindow", u"File", None))
         self.menuWindow.setTitle(QCoreApplication.translate("MainWindow", u"Window", None))
         self.menuChart.setTitle(QCoreApplication.translate("MainWindow", u"Chart", None))
