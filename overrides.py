@@ -80,13 +80,12 @@ class AltDateAxisItem(DateAxisItem):
         for v in values:
             if v>=0:
                 try:       
-                    upvalues.append(self.times[int(v//self.tf)])
+                    upvalues.append(int(self.times[int(v//self.tf)]))
                 except Exception:
-                    upvalues.append(self.times[-1]+v-self.last_tick+dadj)
+                    upvalues.append(int(self.times[-1]+v-self.last_tick+dadj))
             else:
-                upvalues.append(self.times[0]+v)
+                upvalues.append(int(self.times[0]+v))
 
-        
         try:
             dates = [utcfromtimestamp(v - self.utcOffset) for v in upvalues]
         except (OverflowError, ValueError, OSError):
