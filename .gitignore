@@ -13,9 +13,11 @@ acct.py
 !data/
 !symbols/
 !examples/
-!MODEL_H1.csv
-
 !Files/
+!mt5linuxport/
+
+!requirements.txt
+!MODEL_H1.csv
 !MODEL_H1results.csv
 
 test*
