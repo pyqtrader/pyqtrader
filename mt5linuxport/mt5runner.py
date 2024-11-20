@@ -75,12 +75,3 @@ def kill_processes(*masks):
                 except psutil.Error as e:
                     print(f"Error killing process {proc.info['pid']}: {e}")
 
-if __name__ == "__main__":
-
-    wp=WineProcess()
-    rates=wp.mt5.copy_rates_from_pos('EURUSD', utils.mt5_timeframe(wp.mt5), 0, 10)
-    print(rates)
-    with (open('rates.csv', 'w')) as f:
-        f.write(str(rates))
-
-    wp.shutdown()

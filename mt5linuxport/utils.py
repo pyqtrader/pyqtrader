@@ -221,16 +221,3 @@ def mt5_timeframe(mt5=None,timeframe='H1'):
         return timeframe_value
     else:
         raise ValueError("Invalid timeframe string")
-
-if __name__=="__main__":
-	manage_server()
-
-	# Example usage
-	# timezone_1 = 'EET'
-	# timezone_2 = 'Europe/Moscow'
-
-	# try:
-	# 	shift = MT5TimeshiftWrapper.get_timezone_shift(timezone_1, timezone_2)
-	# 	print(f"The time difference between {timezone_1} and {timezone_2} is {shift:.2f} hours.")
-	# except ValueError as e:
-	# 	print(e)

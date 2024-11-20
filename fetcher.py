@@ -355,9 +355,3 @@ class FetcherMT5(QtCore.QObject):
                     return s.name
         
             return symbols[0].name
-
-if __name__=="__main__":
-    fetcher=FetcherMT5(window_name=mt5runner.WNAME,exe_path=mt5runner.EXE_PATH)
-    data=fetcher.fetch_data(symbol='BTCUSDT.fut',count=10)
-    print(data)
-    fetcher.wp.shutdown()

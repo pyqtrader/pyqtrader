@@ -1,4 +1,4 @@
-# MetaTrader 5 for linux systems
+# MetaTrader 5 for Linux systems
 This Linux port utilizes the mt5linux [library](https://github.com/lucas-campagna/mt5linux), employing [Wine](https://www.winehq.org), [RPyC](https://github.com/tomerfiliba-org/rpyc), and a Windows version of Python to enable the use of [MetaTrader 5](https://pypi.org/project/MetaTrader5) on Linux.
 
 ## Installation
