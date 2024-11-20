@@ -13,6 +13,7 @@ import timeseries as tmss, timeseries
 from timeseries import dtPoint, dtCords
 import charttools as chtl,charttools
 import uitools
+from fetcher import FetcherMT5
 
 
 #debugging section
@@ -550,7 +551,6 @@ class DrawTrendLine(DrawSegment):
         # Draw the line segm
         # ent extended to the top and bottom axes
         p.drawLine(*self._drawpoints)
-        
     @staticmethod
     def ray_points(h1, h2, top, bottom, ray) -> typing.List[Point]:
         def remove_duplicates(pts):
@@ -560,6 +560,9 @@ class DrawTrendLine(DrawSegment):
                     res.append(p)
             if len(res)==1:
                 res*=2
+            elif len(res)>2:
+                res=res[:2]
+            
             if len(res)!=2:
                 raise ValueError("Ray points error")     
             
@@ -1033,6 +1036,7 @@ def fibo_factory(base=DrawSegment,dialog=FiboTabsDialog, menu_name='Fibo',
                         break
                 else:
                     self.marks.remove(mark)
+                    self.plt.removeItem(mark)
 
         def set_props(self,props):
             super().set_props(props)
@@ -1191,6 +1195,14 @@ class DrawRuler(DrawSegment):
             self.tag.setColor(props['color'])
         return super().set_props(props)
     
+    def item_hide(self,**kwargs):
+        self.tag.hide()
+        super().item_hide(**kwargs)
+    
+    def item_show(self):
+        self.tag.show()
+        super().item_show()
+
     def removal(self):
         self.plt.removeItem(self.tag)
         return super().removal()
@@ -2286,6 +2298,11 @@ class AltPlotWidget(pg.PlotWidget):
             
     def symb_change(self):
         symb=self.eline.text().strip().upper() #strip of spaces and capitalize
+        fetch=self.mwindow.fetch
+
+        if isinstance(fetch,FetcherMT5):
+            symb=fetch.get_best_symbol_match(symb)
+        
         chtl.set_chart(self,symbol=symb)
 
         self.subwindow.setFocus()
@@ -2378,7 +2395,7 @@ class NewThread(QtCore.QThread):
                     prev_lct=self.prev_lc['data'].t.iloc[-1]
                     if lct>prev_lct:
                         self.prev_lc=self.lc                
-                        todt=time.time()
+                        todt=int(time.time())
                         self.incs=self.fetch.fetch_data(session=self.session, symbol=self.sb,fromdt=prev_lct,todt=todt,
                                 timeframe=self.tf)
                         if self.incs!=None:
@@ -2390,9 +2407,16 @@ class NewThread(QtCore.QThread):
         def dr():
             self.data_request()
                        
+        # def closure():
+        #     if hasattr(self,'timer'):
+        #         self.timer.stop() #stop QTimer
+        #     self.quit() #quit QThread
+
+        # This formulation of closure() avoids inter-thread conflicts and related warnings:
         def closure():
             if hasattr(self,'timer'):
-                self.timer.stop() #stop QTimer
+                from PySide6.QtCore import QMetaObject, Qt
+                QMetaObject.invokeMethod(self.timer, "stop", Qt.ConnectionType.AutoConnection)
             self.quit() #quit QThread
 
         if cfg.DYNAMIC_QUERYING==True:

@@ -3,7 +3,7 @@ from PySide6 import QtCore,QtGui
 from pyqtgraph.graphicsItems.PlotCurveItem import PlotCurveItem
 import pyqtgraph as pg
 from pyqtgraph import Point
-import os, requests, typing
+import os, requests, typing, time
 import numpy as np
 import pandas as pd
 import dataclasses as dc
@@ -39,21 +39,36 @@ class Timeseries:
         self.fetch=ftch.Fetcher() if fetch is None else fetch
 
         # if cached timeseries file exists
+        up_to_date_save_exists=False
         if os.path.isfile(self.datasource) and os.stat(self.datasource).st_size!=0:
             self.data=pd.read_csv(self.datasource,names=cfg.TS_NAMES)
             lc_time=self.data.t.iloc[-1]
-            datadict=self.fetch.fetch_data(session=ses,fromdt=lc_time,symbol=self.symbol,
-                timeframe=self.tf,count=self.count)
+            
+            # Do not retrieve exessive data
+            current_time=int(time.time())
+            bars_to_current_time=1+(current_time-lc_time)//self.tf
+            datadict=self.fetch.fetch_data(session=ses,fromdt=lc_time, symbol=self.symbol,
+                timeframe=self.tf,count=min(self.count,bars_to_current_time))
+
+            # if connection is on 
             if datadict is not None:
-                self.update_ts(datadict)
-                # append new data to the file, [1:] to exclude already existing candle
-                if self.lc_complete:
-                    datadict['data'].iloc[1:].to_csv(self.datasource,mode='a',index=None,header=None)
+                # if the file is up to date
+                if bars_to_current_time<self.count:
+                    up_to_date_save_exists=True
+                    self.update_ts(datadict)
+
+                    # append new data to the file, [1:] to exclude already existing candle
+                    if self.lc_complete:
+                        datadict['data'].iloc[1:].to_csv(self.datasource,mode='a',index=None,header=None)
+                    else:
+                        datadict['data'].iloc[1:-1].to_csv(self.datasource,mode='a',index=None,header=None) #exclude incomplete candle
+                # if file is obsolete(older than count)
                 else:
-                    datadict['data'].iloc[1:-1].to_csv(self.datasource,mode='a',index=None,header=None) #exclude incomplete candle
-        
-        # if cached timeseries file does not exist
-        else:
+                    # clear the obsolete data to avoid mixing it with new data
+                    self.data=None
+
+        # if cached timeseries file does not exist or it is obsolete (older than count)
+        if not up_to_date_save_exists:
             datadict=self.fetch.fetch_data(session=ses,symbol=self.symbol,timeframe=self.tf,count=self.count)
             if datadict is not None:
                 self.update_ts(datadict)

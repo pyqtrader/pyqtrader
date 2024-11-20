@@ -209,7 +209,7 @@ def set_chart(plt,symbol=None,timeframe=None):
         plt.sigTimeseriesChanged.emit(new_item.timeseries)
         plt.vb.sigResized.emit(plt.vb) #workaround to ensure propogation of AltDateAxisItem data
     except Exception as e:
-        simple_message_box(text=f'Invalid symbol: {e}',icon=QtWidgets.QMessageBox.Warning)
+        simple_message_box(text=f'Invalid symbol: {repr(e)}',icon=QtWidgets.QMessageBox.Warning)
         #print('Invalid symbol')
 
 def is_linux():

@@ -12,7 +12,9 @@ The manuals and demos are available on our YouTube @pyqtrader (https://www.youtu
 
 ## Login
 
-Currently, the application supports market access via Oanda's API.  Consult Oanda's official website regarding the API's setup and use.
+Currently, the market is accessed via MetaTrader 5 integration for Linux.  Read `mt5linuxport/README` for detailed instructions.
+
+Legacy market access via Oanda's API is available but no longer supported.  Consult Oanda's official website regarding the API's setup and use.
 
 ## Donate
 

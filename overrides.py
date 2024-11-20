@@ -85,7 +85,7 @@ class AltDateAxisItem(DateAxisItem):
                     upvalues.append(int(self.times[-1]+v-self.last_tick+dadj))
             else:
                 upvalues.append(int(self.times[0]+v))
-
+        
         try:
             dates = [utcfromtimestamp(v - self.utcOffset) for v in upvalues]
         except (OverflowError, ValueError, OSError):

@@ -14,7 +14,6 @@ import uitools
 import studies as stds, studies
 import labelings as lbls,labelings
 import fetcher as ftch,fetcher
-import backtester
 import styles
 from drawings import AltPlotWidget as APW
 
@@ -122,14 +121,12 @@ class MDIWindow(QtWidgets.QMainWindow):
     sigMainWindowVariablesUpdate=QtCore.Signal() #signal accross all subws such as Experts on/off
     sigAcctDataChanged=QtCore.Signal()
     sigEscapePressed=QtCore.Signal()
-    def __init__(self,profiles=cfg.D_PROFILES,application=None,fetch=None):
+    def __init__(self,profiles=cfg.D_PROFILES,application=None):
         super().__init__()
         self.pstate=[] #total record of all plots (state of profiles)
         self.profiles=profiles
         self.props=cfg.D_METAPROPS
         self.app=application
-        self.fetch=fetch
-        self.sigAcctDataChanged.connect(self.fetch.reload_acct)
 
     #UI initialization       
         self.ui = Ui_MainWindow()
@@ -147,7 +144,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.message_connection_status=QtWidgets.QLabel()
         self.message_connection_status.setText(cfg.NO_CONNECTION_MESSAGE)
         self.ui.statusbar.addWidget(self.message_connection_status)       
-        self.fetch.sigConnectionStatusChanged.connect(self.connection_status)
+        
 
         # self.sc_copy_item = QtWidgets.QShortcut(QtWidgets.QKeySequence('Ctrl+C'), self)
         # self.sc_copy_item.activated.connect(self.copy_item_act)
@@ -177,6 +174,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionNew.triggered.connect(lambda *args: self.window_act("New"))
         self.ui.actionOpen.triggered.connect(lambda *args: self.window_act('Open'))
         self.ui.actionSave_As.triggered.connect(lambda *args: self.window_act('Save As'))
+        self.ui.actionMT5_Integration.triggered.connect(lambda *args: uitools.MT5IntegrationDialog.__call__(self))
         self.ui.actionOffline.triggered.connect(lambda *args: self.window_act('Offline'))
         self.ui.actionLogin.triggered.connect(lambda *args: self.window_act('Login'))
         #Edit
@@ -278,11 +276,17 @@ class MDIWindow(QtWidgets.QMainWindow):
                 props=wind['props'] 
                 self.props=props #props need to be assigned before subwindows to ensure that non-item props (like magnet)
                                     #are available before when subwindows are processed
+                
+                # Initiate fetcher
+                self.fetch=self.fetcher_init()
                 if 'Offline' in self.props:
                     self.fetch.offline_mode=self.props['Offline']
+                
                 #hide hidden toolbars/status bar
                 self.widgets_init()
                 self.set_theme()
+
+                #Open sub-windows
                 #--------------------
                 with open(cfg.DATA_STATES_DIR+cfg.PROFILE_STATE_FLNM, 'r') as fpr:
                     ps=fpr.read()
@@ -302,6 +306,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         except Exception:
             pass
 
+        
     #Toggles
         if 'magnet' in self.props and self.props['magnet'] is True:
             self.ui.actionMagnet.setChecked(True)
@@ -366,6 +371,27 @@ class MDIWindow(QtWidgets.QMainWindow):
         # self.sc_test=QtWidgets.QShortcut(QtWidgets.QKeySequence('L'), self)
         # self.sc_test.activated.connect(self.foo)
     
+    # Encapsulate fetcher initiation
+    def fetcher_init(self)->None:
+        mt5_integration=self.props.get('mt5_integration_for_linux',False)
+        winepfx=self.props.get('mt5_wineprefix',None)
+        mt5_headless=self.props.get('mt5_headless_mode_enabled',None)
+        exe=self.props.get('mt5_executable_path',None)
+        python_exe=self.props.get('python_exe_path',None)
+        if mt5_integration:
+            fetch=ftch.FetcherMT5(exe_path=exe, headless_mode=mt5_headless, 
+                    winepfx=winepfx, python_exe_path=python_exe)
+        else:
+            fetch=ftch.Fetcher()
+        
+        fetch.sigConnectionStatusChanged.connect(self.connection_status)
+        if hasattr(fetch,'reload_acct'):
+            self.sigAcctDataChanged.connect(fetch.reload_acct)
+        if hasattr(fetch,'wp'):
+            self.sigMainWindowClosing.connect(fetch.wp.shutdown)
+
+        return fetch
+
     #create persistent object for lambda *args: api.invoker() with arguments for
     #update_api_shortcuts()
     class _Invoke: 
@@ -941,7 +967,15 @@ class MDIWindow(QtWidgets.QMainWindow):
             
             item=None
             try:
-                item=self.cbl_plotter(plt)
+                
+                ascertained_symbol=cfg.D_SYMBOL
+                # Handling default symbol for mt5:
+                if isinstance(self.fetch,ftch.FetcherMT5):
+                    current_symbol=self.props.get('default_symbol',cfg.D_SYMBOL)
+                    ascertained_symbol=self.fetch.ascertain_default_symbol(current_symbol)
+                
+                item=self.cbl_plotter(plt, symbol=ascertained_symbol)
+            
             except Exception as e:
                 for file in os.listdir(cfg.DATA_SYMBOLS_DIR):
                     fl=chtl.filename_to_symbol(file)
@@ -1181,6 +1215,7 @@ class MDIWindow(QtWidgets.QMainWindow):
 def mainexec():
 
     import sys
+    from mt5linuxport import mt5runner
 
     cwd=os.getcwd()
     sys.path.append(cwd)
@@ -1191,8 +1226,9 @@ def mainexec():
     app.setStyle("Fusion")
     app.setWindowIcon(QtGui.QIcon(f'{cfg.CORE_ICON}'))
     
-    ft=ftch.Fetcher()
-    mdi = MDIWindow(application=app,fetch=ft)
+    # ft=ftch.FetcherMT5(window_name=mt5runner.WNAME,exe_path=mt5runner.EXE_PATH)
+    # ft=ftch.Fetcher()
+    mdi = MDIWindow(application=app)
     mdi.show()
     app.exec()
 

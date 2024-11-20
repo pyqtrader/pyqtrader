@@ -880,6 +880,7 @@ class SettingsDialog(QtWidgets.QDialog):
         self.mwindow=mwindow
         self.tmr=self.timer
         self.cnt=self.count
+        self.ds=self.default_symbol
         self.layout=QtWidgets.QGridLayout()
         self.setLayout(self.layout)
         self.labels=[]
@@ -891,6 +892,12 @@ class SettingsDialog(QtWidgets.QDialog):
         self.themebox.setCurrentText(self.theme)
         self.attach(self.themebox)
         self.themebox.currentTextChanged.connect(lambda *args: setattr(self,'theme',self.themebox.currentText()))
+
+        self.labels.append(QtWidgets.QLabel('Default symbol: '))
+        defsym = QtWidgets.QLineEdit()
+        defsym.setText(self.default_symbol)
+        self.attach(defsym)
+        defsym.textChanged.connect(lambda *args: setattr(self, 'ds', defsym.text()))
 
         self.labels.append(QtWidgets.QLabel('Server query periodicity,ms: '))
         pbox=QtWidgets.QSpinBox()
@@ -930,13 +937,22 @@ class SettingsDialog(QtWidgets.QDialog):
 
         edb=EmbeddedDialogBox('Reset','Apply','Cancel','Ok',default_button=2)
         self.layout.addWidget(edb,len(self.labels)+1,0,1,0)
-        edb.btn[0].clicked.connect(lambda *args: (pbox.setValue(cfg.D_TIMER),cbox.setValue(cfg.D_BARCOUNT)))
+        edb.btn[0].clicked.connect(lambda *args: (defsym.setText(cfg.D_SYMBOL), pbox.setValue(cfg.D_TIMER),
+                                                  cbox.setValue(cfg.D_BARCOUNT)))
         edb.btn[1].clicked.connect(self.apply)
         edb.btn[2].clicked.connect(self.close)
         edb.btn[3].clicked.connect(lambda *args: self.apply(close=True))
 
         self.exec()
-    
+        
+    @property
+    def default_symbol(self):
+        return self.mwindow.props.get('default_symbol',cfg.D_SYMBOL)
+
+    @default_symbol.setter
+    def default_symbol(self,x):
+        self.mwindow.props['default_symbol']=x
+
     @property
     def timer(self):
         return self.mwindow.props['timer']
@@ -959,6 +975,8 @@ class SettingsDialog(QtWidgets.QDialog):
 
     def apply(self,close=False):
         import styles
+        if self.default_symbol!=self.ds:
+            self.default_symbol=self.ds
         if self.timer!=self.tmr:
             self.timer=self.tmr
             for wnd in (mw:=self.mwindow).mdi.subWindowList():
@@ -1162,4 +1180,90 @@ class HistoryDialog(QtWidgets.QDialog):
                     break
         self.mwindow.window_act('Refresh')
         self.close()
-            
+
+class MT5IntegrationDialog(QtWidgets.QDialog):
+    def __init__(self, mwindow) -> None:
+        super().__init__()
+        self.setWindowTitle('MT5 Integration Settings')
+        self.mwindow = mwindow
+        self.layout = QtWidgets.QGridLayout()
+        self.setLayout(self.layout)
+        explanations=\
+        '''
+        Metatrader 5 integration for Linux requires at least one MetaTrader 5 terminal installed on your system.
+        Consult documentation for other requirements.
+        '''
+        self.general_description = QtWidgets.QLabel(explanations)
+        self.layout.addWidget(self.general_description)
+
+        # Checkbox for "MetaTrader 5 integration"
+        self.mt5_integration_checkbox = QtWidgets.QCheckBox('Enable MetaTrader 5 integration for Linux')
+        self.layout.addWidget(self.mt5_integration_checkbox)
+        self.mt5_integration_checkbox.setChecked(self.mwindow.props.get('mt5_integration_for_linux', False))
+
+        # String box for the path to the executable "Path to the executable"
+        self.python_exe_path_label = QtWidgets.QLabel('Path to python.exe(required):')
+        self.layout.addWidget(self.python_exe_path_label)
+        self.python_exe_path_line_edit = QtWidgets.QLineEdit()
+        self.layout.addWidget(self.python_exe_path_line_edit)
+        self.python_exe_path_line_edit.setText(self.mwindow.props.get('python_exe_path', ''))
+
+        # String box for the path to the executable "Path to the executable"
+        self.mt5_wineprefix = QtWidgets.QLabel('Wineprefix if different from the system default:')
+        self.layout.addWidget(self.mt5_wineprefix)
+        self.mt5_wineprefix_line_edit = QtWidgets.QLineEdit()
+        self.layout.addWidget(self.mt5_wineprefix_line_edit)
+        self.mt5_wineprefix_line_edit.setText(self.mwindow.props.get('mt5_wineprefix', ''))
+
+        # String box for the path to the executable "Path to the executable"
+        self.mt5_executable_path_label = QtWidgets.QLabel('Path to the executable (optional):')
+        self.layout.addWidget(self.mt5_executable_path_label)
+        self.mt5_executable_path_line_edit = QtWidgets.QLineEdit()
+        self.layout.addWidget(self.mt5_executable_path_line_edit)
+        self.mt5_executable_path_line_edit.setText(self.mwindow.props.get('mt5_executable_path', ''))
+
+       # Horizontal line separator
+        separator = QtWidgets.QFrame()
+        separator.setFrameShape(QtWidgets.QFrame.HLine)
+        separator.setFrameShadow(QtWidgets.QFrame.Sunken)
+        self.layout.addWidget(separator)
+
+        # Subsection named "Headless mode"
+        self.headless_mode_label = QtWidgets.QLabel('Headless mode (experimental)')
+        self.layout.addWidget(self.headless_mode_label)
+        explanations=\
+        '''
+        On start up, the headless mode attempts to hide mt5 terminal from visibility after a small pause.
+        The terminal continues running in the background in a headless manner.
+        The mode requires xfvb package to be installed on your system. 
+        '''
+        self.headless_mode_description = QtWidgets.QLabel(explanations)
+        self.layout.addWidget(self.headless_mode_description)
+
+         # Checkbox for "Enable headless mode"
+        self.headless_mode_checkbox = QtWidgets.QCheckBox('Enable headless mode')
+        self.layout.addWidget(self.headless_mode_checkbox)
+        self.headless_mode_checkbox.setChecked(self.mwindow.props.get('mt5_headless_mode_enabled', False))
+
+        self.button_box = EmbeddedDialogBox('Save', 'Cancel', default_button=1)
+        self.layout.addWidget(self.button_box)
+
+        self.button_box.btn[0].clicked.connect(self.save_settings)
+        self.button_box.btn[1].clicked.connect(self.close)
+
+        self.exec()
+
+    def save_settings(self):
+        a=self.mwindow.props['mt5_integration_for_linux'] = self.mt5_integration_checkbox.isChecked()
+        b=self.mwindow.props['python_exe_path'] = self.python_exe_path_line_edit.text()
+        self.mwindow.props['mt5_wineprefix'] = self.mt5_wineprefix_line_edit.text()
+        self.mwindow.props['mt5_executable_path'] = self.mt5_executable_path_line_edit.text()
+        self.mwindow.props['mt5_headless_mode_enabled'] = self.headless_mode_checkbox.isChecked()
+        
+        if a and b=='':
+            simple_message_box("Error notification",icon=QtWidgets.QMessageBox.Critical,
+            text="You must specify path to python.exe if you want to enable MetaTrader 5 integration")
+        else:
+            simple_message_box("Restart notification",icon=QtWidgets.QMessageBox.Information,
+                            text="Restart is required for the changes to take effect")
+            self.close()

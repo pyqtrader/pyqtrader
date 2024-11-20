@@ -80,6 +80,7 @@ class TradeRecord:
         # Ensure that the dataframe contains all required columns (id_number is not obligatory)
         tr_set=set(cfg.TRADE_RECORD.values())
         tr_set.remove(cfg.TRADE_RECORD['id_number'])
+        tr_set.remove(cfg.TRADE_RECORD['volume'])
         assert tr_set-set(df.columns)==set(), "Source file misses some required columns"
 
         record=[]
@@ -216,11 +217,10 @@ class DrawTradeRecord (pg.GraphicsObject):
     
    
     def shape(self):
-        if not self.trade_record:
-            return
-        
         p = pg.QtGui.QPainterPath()
-    
+        if not self.trade_record:
+            return p
+        
         # Ensure mouse interactions over the entire painted shape
         for trade in self.trade_record.record:
             h1 = Point(*trade.entry.xy())

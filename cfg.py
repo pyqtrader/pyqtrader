@@ -2,7 +2,7 @@ from PySide6 import QtCore
 
 PROGRAM_NAME='pyqtrader'
 
-VERSION='1.2'
+VERSION='1.3'
 
 DYNAMIC_QUERYING=True #continuous updating from the data provider, set False to turn off (no QTimer initiation) 
 
@@ -274,6 +274,10 @@ TRADE_RECORD= dict(
     close_time='close_time',
     close_price='close_price'
 )
+
+# GUI message timeout in seconds to avoid blocking of GUI by recurring messages,
+# eg for messages generated on every server query
+GUI_MESSAGE_TIMEOUT=30
 
 #Currently not in use, styles.py used instead:
 # LIGHTMODESTYLE=('''

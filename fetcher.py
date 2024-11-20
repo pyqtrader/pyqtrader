@@ -1,13 +1,15 @@
 import os
-import requests
+import requests, time
 import pandas as pd
 import numpy as np
 from PySide6 import QtCore
 from datetime import datetime as dtm
 from importlib.machinery import SourceFileLoader
+from difflib import SequenceMatcher
 
 import cfg
 import charttools as chtl, charttools
+from mt5linuxport import utils, mt5runner
 
 from _debugger import _p,_pc,_printcallers,_exinfo,_ptime,_print
 
@@ -85,7 +87,7 @@ class Fetcher(QtCore.QObject):
         self.sigConnectionStatusChanged.emit(self.connected)
     
     def fetch_data(self,session=None,symbol=cfg.D_SYMBOL, fromdt=None, todt=None, 
-            count=cfg.D_BARCOUNT,timeframe=cfg.D_TIMEFRAME):
+            count=cfg.D_BARCOUNT,timeframe=cfg.D_TIMEFRAME, **kwargs):
         
         #--------- breakpoint for the offline mode or short symbol names:
         if self.offline_mode or len(symbol)<6:
@@ -203,3 +205,159 @@ class Fetcher(QtCore.QObject):
         df.to_csv(filename,index=False,header=False)
 
         return
+
+class FetcherMT5(QtCore.QObject):
+    sigConnectionStatusChanged=QtCore.Signal(object)
+    def __init__(self, *args, exe_path=None, headless_mode=False, 
+                winepfx=None, python_exe_path=None, **kwargs):
+        super().__init__(*args,**kwargs)
+        
+        # Ensure that python.exe is specified
+        if not python_exe_path:
+            utils.simple_message_box(title="Error", text="Path to python.exe must be specified in order to run mt5 integration")
+        
+        elif not os.path.isfile(python_exe_path):
+                utils.simple_message_box(title="Error",text=f"python.exe at specified path:\n '{python_exe_path}'\ndoes not exist.\n"
+                    "Path to python.exe must be correctly specified in order to run mt5 integration.")
+        else:
+            self.wp=mt5runner.WineProcess(exe_path=exe_path, headless_mode=headless_mode,
+                                    winepfx=winepfx, python_exe_path=python_exe_path)
+
+        self.connected=False
+        self.offline_mode=False
+
+        self.gui_message_timer=None
+
+    def fetch_data(self,symbol=cfg.D_SYMBOL,fromdt=None, todt=None, start_pos=0,
+                   count=cfg.D_BARCOUNT,
+                   timeframe=cfg.D_TIMEFRAME, **kwargs):
+
+        #--------- breakpoint for the offline mode or short symbol names:
+        if self.offline_mode:
+            return None
+        ############
+
+        if fromdt is None:
+            rates,error_message=self.wp.mt5.load_rates(symbol=symbol,timeframe=timeframe,
+                                    start_pos=start_pos,count=count)       
+        elif todt is not None:
+            rates,error_message=self.wp.mt5.load_rates(symbol=symbol,timeframe=timeframe,
+                                        date_from=fromdt,date_to=todt)
+        else:
+            rates,error_message=self.wp.mt5.load_rates(symbol=symbol,timeframe=timeframe,
+                                            date_from=fromdt,count=count)
+
+        if rates is None:
+            if self.gui_message_timer is None or time.time()-self.gui_message_timer>cfg.GUI_MESSAGE_TIMEOUT:
+                self.gui_message_timer=time.time()
+                ts_id=f"{symbol},{cfg.tf_to_label(timeframe)}"
+                text=f"Failed to load mt5 timeseries: {error_message}. "
+                print(ts_id+": "+text)
+                chtl.simple_message_box(f"{ts_id}: Timeseries loading failure", text=f"{text}" 
+                                        f"Consider switching to offline mode until the issue is resolved.")
+            return None
+        
+        elif not self.connected:
+                self.trigger()
+
+        df=pd.DataFrame(rates)
+        # Remove unnecessary columns
+        df=df.iloc[:,:5]
+        # Remove duplicates
+        df.drop_duplicates(subset=df.columns[0], inplace=True)
+        df.reset_index(drop=True,inplace=True)
+        # Round prices to the point precision
+        df.iloc[:,1:]=df.iloc[:,1:].round(chtl.precision(symbol)).astype(float)
+        
+        # Rename columns
+        df.columns=cfg.TS_NAMES
+
+        # Check whether the last candle is complete
+        lc_finish_time=df['t'].iloc[-1]+timeframe
+        current_time=time.time()
+        lc_complete=lc_finish_time<current_time
+
+        return {'data':df,'complete':lc_complete}
+    
+    def fetch_lc(self, session=None, symbol=cfg.D_SYMBOL, timeframe=cfg.D_TIMEFRAME):
+        if self.offline_mode:
+            return None
+        return self.fetch_data(session=session, symbol=symbol, count=1, timeframe=timeframe)
+
+    def get_best_symbol_match(self, symbol):
+        """
+        Retrieves the best match for the given symbol from the list of symbols in the mt5 object.
+
+        Args:
+            symbol (str): The symbol to search for.
+
+        Returns:
+            str: The best match for the symbol, or None if no match is found.
+        """
+        if len(symbol) <= 3:
+            text="Symbol name must be at least 4 characters long."
+            print(text)
+            chtl.simple_message_box(text=text)
+            return None
+
+        symbols = self.wp.mt5.symbols_get()
+        best_match = None
+        best_match_ratio = 0
+
+        for s in symbols:
+            ratio = SequenceMatcher(None, symbol.upper(), s.name.upper()).ratio()
+            if ratio > best_match_ratio:
+                best_match = s.name
+                best_match_ratio = ratio
+
+        return best_match
+
+    def trigger(self):
+        self.connected= not self.connected
+        self.sigConnectionStatusChanged.emit(self.connected)
+
+    def history(self, tf, symbol, session=None, bars=0):
+       
+        grn=tf_to_grn(tf)
+        bars=oa_dict[f'{grn}']['cnt'] if bars==0 else bars
+        df=pd.DataFrame()
+
+        data = self.fetch_data(symbol=symbol, count=bars, timeframe=tf)
+        if data is None:
+            return
+
+        df = data['data'].copy() # <--- added `.copy()` to avoid SettingWithCopyWarning
+        if not data['complete']:
+            df = df.iloc[:-1]
+
+        df.drop_duplicates(subset=df.columns[0], inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        filename = chtl.symbol_to_filename(symbol, cfg.tf_to_label(tf), True)
+        df.to_csv(filename, index=False, header=False)
+
+    # Used in window_act("New") of MDIWindow class
+    def ascertain_default_symbol(self, default_symbol=cfg.D_SYMBOL):
+        """Determine the default symbol to use for fetching data.
+
+        If the configured default symbol exists and is visible, it is used.
+        Otherwise, the first visible symbol in the list of symbols is used.
+        """
+
+        best_match = self.get_best_symbol_match(default_symbol)
+        if default_symbol == best_match:
+            return best_match
+        elif default_symbol != cfg.D_SYMBOL:
+            return best_match
+        else:
+            symbols = self.wp.mt5.symbols_get()
+            for s in symbols:
+                if s.visible:
+                    return s.name
+        
+            return symbols[0].name
+
+if __name__=="__main__":
+    fetcher=FetcherMT5(window_name=mt5runner.WNAME,exe_path=mt5runner.EXE_PATH)
+    data=fetcher.fetch_data(symbol='BTCUSDT.fut',count=10)
+    print(data)
+    fetcher.wp.shutdown()

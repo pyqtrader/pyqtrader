@@ -36,6 +36,7 @@
     <addaction name="actionNew"/>
     <addaction name="actionOpen"/>
     <addaction name="actionSave_As"/>
+    <addaction name="actionMT5_Integration"/>
     <addaction name="actionOffline"/>
     <addaction name="separator"/>
     <addaction name="actionLogin"/>
@@ -884,6 +885,11 @@
   <action name="actionBacktest">
    <property name="text">
     <string>Backtest..</string>
+   </property>
+  </action>
+  <action name="actionMT5_Integration">
+   <property name="text">
+    <string>MT5 Integration</string>
    </property>
   </action>
  </widget>
