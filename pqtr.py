@@ -264,8 +264,8 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionEmpty_Profile_Bin.triggered.connect(self.empty_profile_bin)
 
     #Restore
-        try:
-            with open(cfg.DATA_STATES_DIR+cfg.WINDOW_STATE_FLNM,'r') as fwin:
+        if os.path.exists(cfg.DATA_STATES_DIR + cfg.WINDOW_STATE_FLNM):
+            with open(cfg.DATA_STATES_DIR + cfg.WINDOW_STATE_FLNM, 'r') as fwin:
                 wind=fwin.read()
                 wind=json.loads(wind)
                 self.resize(*wind['window size'])
@@ -275,38 +275,37 @@ class MDIWindow(QtWidgets.QMainWindow):
                     self.profiles=prfs
                 props=wind['props'] 
                 self.props=props #props need to be assigned before subwindows to ensure that non-item props (like magnet)
-                                    #are available before when subwindows are processed
-                
-                # Initiate fetcher
-                self.fetch=self.fetcher_init()
-                if 'Offline' in self.props:
-                    self.fetch.offline_mode=self.props['Offline']
-                
-                #hide hidden toolbars/status bar
-                self.widgets_init()
-                self.set_theme()
+                                #are available before when subwindows are processed
 
-                #Open sub-windows
-                #--------------------
-                with open(cfg.DATA_STATES_DIR+cfg.PROFILE_STATE_FLNM, 'r') as fpr:
-                    ps=fpr.read()
-                    ps=json.loads(ps)
-                    if isinstance(ps,list):
-                        self.pstate=ps
-                    self.open_subw(self.pstate)
-                #--------------------
-                for key,val in props.items():# item props need to be processed after subwindows 
-                                                #to ensure that they are not reset by the subwindows
-                    if isinstance(val,dict):
-                        for wd in props[key]:
-                            try:
-                                eval(key).props[wd]=props[key][wd]
-                            except Exception:
-                                pass
-        except Exception:
-            pass
+        # Initiate fetcher
+        self.fetch=self.fetcher_init()
+        if 'Offline' in self.props:
+            self.fetch.offline_mode=self.props['Offline']
 
-        
+        #hide hidden toolbars/status bar
+        self.widgets_init()
+        self.set_theme()
+
+        #Open sub-windows
+        #--------------------
+        if os.path.exists(cfg.DATA_STATES_DIR + cfg.PROFILE_STATE_FLNM):
+            with open(cfg.DATA_STATES_DIR + cfg.PROFILE_STATE_FLNM, 'r') as fpr:
+                ps=fpr.read()
+                ps=json.loads(ps)
+                if isinstance(ps,list):
+                    self.pstate=ps
+                self.open_subw(self.pstate)
+            #--------------------
+       
+        for key,val in self.props.items():# item self.props need to be processed after subwindows 
+                                        #to ensure that they are not reset by the subwindows
+            if isinstance(val,dict):
+                for wd in self.props[key]:
+                    try:
+                        eval(key).self.props[wd]=self.props[key][wd]
+                    except Exception:
+                        pass
+
     #Toggles
         if 'magnet' in self.props and self.props['magnet'] is True:
             self.ui.actionMagnet.setChecked(True)
@@ -1192,7 +1191,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.sigEscapePressed.disconnect(self.win_close_sig_func)
     
     def widgets_init(self):
-        if self.props['hidden']!=[]:
+        if self.props.get('hidden')!=None and self.props['hidden']!=[]:
             for ch in self.children():
                 if isinstance(ch,QtWidgets.QToolBar) or isinstance(ch,QtWidgets.QStatusBar):
                     if ch.objectName() in self.props['hidden']: ch.hide()
