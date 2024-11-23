@@ -10,7 +10,7 @@ If receiving messages about missing python libraries, install these libraries.
 
 The manuals and demos are available on our YouTube @pyqtrader (https://www.youtube.com/@pyqtrader)
 
-## Login
+## Market access
 
 Currently, the market is accessed via MetaTrader 5 integration for Linux.  Read [mt5linuxport/README](https://github.com/pyqtrader/pyqtrader/blob/main/mt5linuxport/README.md) for detailed instructions.
 

@@ -246,6 +246,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionDrawVerLine.triggered.connect(lambda *args: click_action(APW.draw_act,drws.DrawVerLine))
         self.ui.actionDrawHorLine.triggered.connect(lambda *args: click_action(APW.draw_act,drws.DrawHorLine))
         self.ui.actionDrawChannel.triggered.connect(lambda *args: click_action(APW.draw_act,drws.DrawChannel))
+        self.ui.actionDrawRegressionChannel.triggered.connect(lambda *args: click_action(APW.draw_act,drws.DrawRegressionChannel))
         self.ui.actionDrawPitchfork.triggered.connect(lambda *args: click_action(APW.draw_act,drws.DrawPitchfork))
         self.ui.actionDrawFibo.triggered.connect(lambda *args: click_action(APW.draw_act,drws.DrawFibo))
         self.ui.actionDrawFiboExt.triggered.connect(lambda *args: click_action(APW.draw_act,drws.DrawFiboExt))
@@ -264,7 +265,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionEmpty_Profile_Bin.triggered.connect(self.empty_profile_bin)
 
     #Restore
-        if os.path.exists(cfg.DATA_STATES_DIR + cfg.WINDOW_STATE_FLNM):
+        try:
             with open(cfg.DATA_STATES_DIR + cfg.WINDOW_STATE_FLNM, 'r') as fwin:
                 wind=fwin.read()
                 wind=json.loads(wind)
@@ -276,6 +277,8 @@ class MDIWindow(QtWidgets.QMainWindow):
                 props=wind['props'] 
                 self.props=props #props need to be assigned before subwindows to ensure that non-item props (like magnet)
                                 #are available before when subwindows are processed
+        except Exception as e:
+            pass
 
         # Initiate fetcher
         self.fetch=self.fetcher_init()
@@ -288,13 +291,15 @@ class MDIWindow(QtWidgets.QMainWindow):
 
         #Open sub-windows
         #--------------------
-        if os.path.exists(cfg.DATA_STATES_DIR + cfg.PROFILE_STATE_FLNM):
+        try:
             with open(cfg.DATA_STATES_DIR + cfg.PROFILE_STATE_FLNM, 'r') as fpr:
                 ps=fpr.read()
                 ps=json.loads(ps)
                 if isinstance(ps,list):
                     self.pstate=ps
                 self.open_subw(self.pstate)
+        except Exception as e:
+            pass
             #--------------------
        
         for key,val in self.props.items():# item self.props need to be processed after subwindows 

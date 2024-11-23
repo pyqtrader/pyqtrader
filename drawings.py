@@ -139,6 +139,7 @@ class DrawProps:
 
 class DrawItem(DrawProps): #ROI generic abstract class
     sigHoverLeaveEvent=QtCore.Signal(object)
+    sigSetupByMouseClicksFinished=QtCore.Signal()
     def __init__(self,plt,dockplt=None,dialog=uitools.DrawPropDialog,clicks=2,
         props=None,caller=None, ray=None, menu_name=None):
         super().config_props(plt.mwindow,props=props,caller=caller)
@@ -226,7 +227,7 @@ class DrawItem(DrawProps): #ROI generic abstract class
         Returns True if the real position is updated and False otherwise
         ''' 
         c=dtc if type(dtc) in (dtCords,dtPoint) else dtCords([dtPoint(*dtp) for dtp in dtc])
- 
+        
         self._dtc=self._dtc.apply(c)                
 
         # dont set real position solely based on raw coords unless explicitly forced
@@ -349,6 +350,7 @@ class DrawItem(DrawProps): #ROI generic abstract class
                 self.set_dtc(update_dtc,force=True)
                 self.plt.scene().sigMouseClicked.disconnect(self.setup_mouseclicks)
                 self.set_selected(True)
+                self.sigSetupByMouseClicksFinished.emit()
 
     def setup_mousemoves(self,mouseMoveEvent):
         xy=Point(self.plt.vb.mapSceneToView(mouseMoveEvent))
@@ -420,15 +422,15 @@ class DTrendLineDialog(uitools.DrawPropDialog):
         self.layout.addWidget(self.dte[0],self.order,1)
         self.dte[0].dateTimeChanged.connect(lambda *args: self.update_dt(0))
 
-        label1=QtWidgets.QLabel('Value 1: ')
-        pbox0=QtWidgets.QDoubleSpinBox()
-        pbox0.setDecimals(self.item.precision)
-        pbox0.setSingleStep(pow(10,-self.item.precision))
-        pbox0.setMaximum(self.yv0*100)
-        pbox0.setValue(self.yv0)
-        self.layout.addWidget(label1,self.order,3)
-        self.layout.addWidget(pbox0,self.order,4)
-        pbox0.valueChanged.connect(lambda *args: setattr(self,'yv0',pbox0.value()))
+        self.label1=QtWidgets.QLabel('Value 1: ')
+        self.pbox0=QtWidgets.QDoubleSpinBox()
+        self.pbox0.setDecimals(self.item.precision)
+        self.pbox0.setSingleStep(pow(10,-self.item.precision))
+        self.pbox0.setMaximum(self.yv0*100)
+        self.pbox0.setValue(self.yv0)
+        self.layout.addWidget(self.label1,self.order,3)
+        self.layout.addWidget(self.pbox0,self.order,4)
+        self.pbox0.valueChanged.connect(lambda *args: setattr(self,'yv0',self.pbox0.value()))
         self.order+=1
 
         label2=QtWidgets.QLabel('Datetime 2: ')
@@ -440,14 +442,14 @@ class DTrendLineDialog(uitools.DrawPropDialog):
         self.dte[1].dateTimeChanged.connect(lambda *args: self.update_dt(1))
 
         label3=QtWidgets.QLabel('Value 2: ')
-        pbox1=QtWidgets.QDoubleSpinBox()
-        pbox1.setDecimals(self.item.precision)
-        pbox1.setSingleStep(pow(10,-self.item.precision))
-        pbox1.setMaximum(self.yv1*100)
-        pbox1.setValue(self.yv1)
+        self.pbox1=QtWidgets.QDoubleSpinBox()
+        self.pbox1.setDecimals(self.item.precision)
+        self.pbox1.setSingleStep(pow(10,-self.item.precision))
+        self.pbox1.setMaximum(self.yv1*100)
+        self.pbox1.setValue(self.yv1)
         self.layout.addWidget(label3,self.order,3)
-        self.layout.addWidget(pbox1,self.order,4)
-        pbox1.valueChanged.connect(lambda *args: setattr(self,'yv1',pbox1.value()))
+        self.layout.addWidget(self.pbox1,self.order,4)
+        self.pbox1.valueChanged.connect(lambda *args: setattr(self,'yv1',self.pbox1.value()))
         self.order+=1
     
         if exec_on==True:
@@ -551,6 +553,7 @@ class DrawTrendLine(DrawSegment):
         # Draw the line segm
         # ent extended to the top and bottom axes
         p.drawLine(*self._drawpoints)
+   
     @staticmethod
     def ray_points(h1, h2, top, bottom, ray) -> typing.List[Point]:
         def remove_duplicates(pts):
@@ -633,6 +636,7 @@ class DrawTrendLine(DrawSegment):
         h1 = self._drawpoints[0] if self._drawpoints else self.endpoints[0].pos()
         h2 = self._drawpoints[1] if self._drawpoints else self.endpoints[1].pos()
         dh = h2-h1
+
         if dh.length() == 0:
             return p
         pxv = self.pixelVectors(dh)[1]
@@ -780,11 +784,8 @@ class DrawChannel(DrawTriPointItem):
         top,bot=self.calculate_intersections(h3,h4)
         self._drawpoints[1]=self.ray_points(h3,h4,top,bot,self.raydir)
     
-        # Draw the line segm
-        p.drawLine(*self._drawpoints[0])
-        
-        # Draw the parallel
-        p.drawLine(*self._drawpoints[1])
+        # Draw the line segm and the parallel
+        p.drawLines([x for sublist in self._drawpoints for x in sublist])
 
         # Paint levels if they exist:
         if self.levels:
@@ -821,6 +822,218 @@ class DrawChannel(DrawTriPointItem):
 
         return p
 
+class DRegressionChannelDialog(DTrendLineDialog):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, exec_on=False, **kwargs)
+        self.multi=self.item.multiplier
+        self.pbox0.setReadOnly(True)
+        self.pbox1.setReadOnly(True)
+
+        label=QtWidgets.QLabel('Multiplier:')
+        self.box_mul=QtWidgets.QDoubleSpinBox()
+        self.box_mul.setDecimals(1)
+        self.box_mul.setSingleStep(0.1)
+        self.box_mul.setMinimum(0.0)
+        self.box_mul.setMaximum(10)
+        self.box_mul.setValue(self.multi)
+        self.layout.addWidget(label,self.order,0)
+        self.layout.addWidget(self.box_mul,self.order,1)
+        self.box_mul.valueChanged.connect(lambda x: setattr(self,'multi',x))
+        self.order+=1
+
+        self.embedded_db()
+        self.exec_()
+    
+    # Note: the price values are calculated directly below rather than taken 
+    # from the object itself to avoid bloating the code with signals
+    # or additional functions for a low priority task.  May be revised in the future
+    def update_item(self, **kwargs):
+        _=super().update_item(**kwargs)
+        
+        # Get ticks slice and unpack it into variables
+        (x0,),(x1,)=self.item.rawdtc.get_slice(slice(1,2))
+        
+        #Calculate regression price values
+        line,_,_=self.item.calculate_regression(x0,x1)
+        self.pbox0.setValue(line[0])
+        self.pbox1.setValue(line[-1])
+
+        self.item.multiplier=self.multi
+        
+        return self.item
+
+class DrawRegressionChannel(DrawSegment):
+    sigDtcChanged=QtCore.Signal(object)
+    def __init__(self,*args, **kwargs):
+        super().__init__(*args, ray=None, menu_name='Regression Channel',
+            dialog=lambda *args,**kwargs: DRegressionChannelDialog(*args,**kwargs), 
+            **kwargs)
+
+        self.line_drawpoints=None
+        self.upper_drawpoints=None       
+        self.lower_drawpoints=None
+
+        self._cached_pos=None
+        self.repos=None
+
+        self.sigSetupByMouseClicksFinished.connect(self.reposition)
+        self.plt.sigMouseOut.connect(self.reposition)
+
+    @property
+    def multiplier(self):
+        return self.props.get('multiplier',cfg.D_REGRESSION_MULTIPLIER)
+
+    @multiplier.setter
+    def multiplier(self,value):
+        self.props['multiplier']=value
+
+    def reposition(self):
+        """
+        Reposition the Regression Channel to the Regression Line.
+        This is necessary because the Regression Line is recalculated
+        based on the data range of the plot, and the Regression Channel
+        must be updated to match the new Regression Line.
+        """
+        ld=self.line_drawpoints
+        if ld:
+            ld=dtCords([dtPoint(None,*ld[0]),dtPoint(None,*ld[1])])
+            self.set_dtc(ld,force=True)
+
+    def mouseDragEvent(self, ev):
+        # get and set real position in tick coordinates
+
+        if ev.isFinish() and self.repos:
+            # Get ticks slice and unpack it into variables
+            (x0,), (x1,)=self.repos.get_slice(slice(1,2))
+            line,_,_=self.calculate_regression(x0,x1)
+            ld=dtCords([dtPoint(None,x0,line[0]),dtPoint(None,x1,line[-1])])
+            self.set_dtc(ld,force=True)
+
+        self.repos=self.rawdtc
+
+        return super().mouseDragEvent(ev)
+
+    def paint(self, p, *args):
+        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, self._antialias)
+        p.setPen(self.currentPen)
+
+        # Get the endpoints of the line segment
+        x0 = self.endpoints[0].pos().x()
+        x1 = self.endpoints[1].pos().x()
+
+        line,upper,lower=self.calculate_regression(x0,x1)
+
+        line=[line[0],line[-1]]
+        upper=[upper[0],upper[-1]]
+        lower=[lower[0],lower[-1]]
+
+        # Swap values if x1<x0
+        if x1<x0:
+            _x=x0;x0=x1;x1=_x
+
+        self.line_drawpoints=[Point(x0,line[0]),Point(x1,line[1])]
+        self.upper_drawpoints=[Point(x0,upper[0]),Point(x1,upper[1])]        
+        self.lower_drawpoints=[Point(x0,lower[0]),Point(x1,lower[1])]
+        
+        p.drawLines([*self.line_drawpoints, *self.upper_drawpoints, *self.lower_drawpoints])
+
+    def shape(self):
+        p = QtGui.QPainterPath()
+
+        # Ensure mouse interactions over the entire painted shape
+        h1 = self.line_drawpoints[0] if self.line_drawpoints else self.endpoints[0].pos()
+        h2 = self.line_drawpoints[1] if self.line_drawpoints else self.endpoints[1].pos()
+        dh = h2-h1
+        if dh.length() == 0:
+            return p
+        pxv = self.pixelVectors(dh)[1]
+        if pxv is None:
+            return p
+            
+        pxv *= 4
+        
+        p=self._shaper(p,h1,h2,pxv)
+    
+        # Add the other parallel and midline to the shape to enable mouse interactions with them
+        if self.upper_drawpoints:
+            h1=self.upper_drawpoints[0]
+            h2=self.upper_drawpoints[1]
+            p=self._shaper(p,h1,h2,pxv)
+        # midline
+        if self.lower_drawpoints:
+            h1=self.lower_drawpoints[0]
+            h2=self.lower_drawpoints[1]
+            p=self._shaper(p,h1,h2,pxv)
+
+        return p
+
+    def boundingRect(self):
+        # Ensure viewRect cache clearance upon position change
+        # otherwise rendering breaks
+        pos=self.getState()['pos']
+        if pos!=self._cached_pos:
+            self._cached_pos=pos
+            self.viewTransformChanged()
+
+        return self.viewRect() 
+
+
+    def calculate_regression(self, x0, x1):
+        """
+        Calculate the regression channel parameters.
+
+        Returns:
+        - regression_line (array): The fitted regression line (centerline).
+        - upper_channel (array): Upper boundary of the channel.
+        - lower_channel (array): Lower boundary of the channel.
+        """
+
+        x0=int(x0//self.timeseries.tf)
+        x1=int(x1//self.timeseries.tf)
+
+        # Process exceptions
+        if x1==x0:
+            x1+=1
+        elif x1<x0:
+            # Exchange values between x0 and x1
+            _x=x0; x0=x1; x1=_x
+        
+        prices=self.timeseries.closes[x0:x1+1] 
+        
+        n = len(prices)
+
+        if n < 2:
+            points=self.rawdtc.cords
+            regression_line=[points[0].y,points[1].y]
+            upper_channel=regression_line
+            lower_channel=regression_line
+        else:
+            x = np.arange(n)  # Time indices (0, 1, 2, ..., n-1)
+
+            # Calculate means of x and y
+            x_mean = np.mean(x)
+            y_mean = np.mean(prices)
+
+            # Calculate slope (b) and intercept (a) of the regression line
+            b = np.sum((x - x_mean) * (prices - y_mean)) / np.sum((x - x_mean) ** 2)
+            a = y_mean - b * x_mean
+
+            # Compute the regression line
+            regression_line = a + b * x
+
+            # Calculate residuals
+            residuals = prices - regression_line
+
+            # Calculate the standard deviation of residuals
+            std_dev = np.std(residuals)
+
+            # Calculate the upper and lower channel lines
+            channel_width = self.multiplier * std_dev
+            upper_channel = regression_line + channel_width
+            lower_channel = regression_line - channel_width
+
+        return regression_line, upper_channel, lower_channel
+
 class DrawPitchfork(DrawTriPointItem):
     def __init__(self, *args,**kwargs):
         super().__init__(*args, ray=None, menu_name='Pitchfork',
@@ -850,11 +1063,9 @@ class DrawPitchfork(DrawTriPointItem):
         # Extend the midpoint to the view edge
         midpoint=self._drawpoints[0][1]+(self._drawpoints[1][1]-self._drawpoints[0][1])/2
 
-        # Draw sidelines
-        p.drawLine(*self._drawpoints[0])
-        p.drawLine(*self._drawpoints[1])
-        # Draw midline
-        p.drawLine(h1,midpoint)
+        # Draw sidelines and midline
+        p.drawLines([x for sublist in self._drawpoints[:2] for x in sublist]+[h1,midpoint])
+
         self._drawpoints[2]=(h1,midpoint) # for reuse in shape
     
     def shape(self):
@@ -1120,8 +1331,7 @@ class DrawFiboExt(_DrawFiboExt):
         h2 = self.endpoints[1].pos()
         h3 = self.endpoints[2].pos()
 
-        p.drawLine(h1,h2)
-        p.drawLine(h2,h3)
+        p.drawPolyline([h1,h2,h3])
 
         self.paint_levels(p)
 
@@ -1711,13 +1921,17 @@ class DrawPolyLine(DrawSegment):
 
     def completion(self,ev):
         if ev.button()==QtCore.Qt.MouseButton.RightButton:
-            self.set_dtc(self.rawdtc) # refresh dt coordinates
             self.plt.scene().sigMouseClicked.disconnect(self.setup_mouseclicks)
             self.plt.scene().sigMouseMoved.disconnect(self.setup_mousemoves)
             self.plt.scene().sigMouseClicked.disconnect(self.completion)
             self.is_new=False
             self.translatable=True
             self.setSelected(True)
+            
+            # Remove the last segment
+            self.removeHandle(self.getHandles()[-1])
+            self._dtc.remove(-1)
+            self.set_dtc(self.rawdtc) # refresh dt coordinates
 
     # native override
     def setState(self, state):

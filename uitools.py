@@ -1039,24 +1039,35 @@ class TreeSubWindow(QtWidgets.QMdiSubWindow):
         self.tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.context_menu)
         self.populate()
+
         self.mdi.addSubWindow(self)
+
+        self.model.directoryLoaded.connect(self.expand_folders)
+        
+        state=self.mwindow.props.get('user_apps_tree_state',None)
+        
+        if state:
+            self.restore_state(state)
+
         self.show()
+
+    def populate(self):
+        self.model = QtWidgets.QFileSystemModel()
+        self.model.setRootPath(cfg.APP_DIR)
+        self.tree.setModel(self.model)
+        self.tree.setRootIndex(self.model.index(cfg.APP_DIR))
+        self.tree.setSortingEnabled(True)
 
     def context_menu(self):
         menu = QtWidgets.QMenu()
         addapp = menu.addAction('Add')
         addapp.triggered.connect(self.add_app)
-        update_shorcuts=menu.addAction('Update Shortcuts')
-        update_shorcuts.triggered.connect(self.mwindow.update_api_shortcuts)
+        editapp = menu.addAction('Edit')
+        editapp.triggered.connect(self.edit_app)
+        update_shortcuts = menu.addAction('Update Shortcuts')
+        update_shortcuts.triggered.connect(self.mwindow.update_api_shortcuts)
         cursor = QtGui.QCursor()
         menu.exec(cursor.pos())
-
-    def populate(self):
-        self.model = QtWidgets.QFileSystemModel()
-        self.model.setRootPath((QtCore.QDir.rootPath()))
-        self.tree.setModel(self.model)
-        self.tree.setRootIndex(self.model.index(cfg.APP_DIR))
-        self.tree.setSortingEnabled(True)
 
     def add_app(self):
         import api
@@ -1065,9 +1076,62 @@ class TreeSubWindow(QtWidgets.QMdiSubWindow):
         if not self.model.isDir(index):
             fpath= path.relpath(self.model.filePath(index))
             fname=path.basename(fpath)
-            api.invoker(self.mdi,fname,fpath)        
+            api.invoker(self.mdi,fname,fpath)
+
+    def edit_app(self):
+        import subprocess
+        index = self.tree.currentIndex()
+        if not self.model.isDir(index):
+            fpath = self.model.filePath(index)
+            subprocess.run(['xdg-open', fpath])
+
+    def save_state(self):
+        state = {'size': self.size().toTuple(),
+                'pos': self.pos().toTuple(),
+                'tree_index': self.tree.currentIndex().data(),
+                'column_widths': [self.tree.columnWidth(i) for i in range(self.tree.header().count())],
+                'column_order': [self.tree.header().logicalIndex(i) for i in range(self.tree.header().count())],
+                'sort_order': self.tree.header().sortIndicatorOrder().value,
+                'sort_section': self.tree.header().sortIndicatorSection(),
+                'expanded_folders': 
+                    [
+                        (self.model.index(row, 0, self.tree.rootIndex()).data(),
+                         self.tree.isExpanded(self.model.index(row, 0, self.tree.rootIndex())))
+                        for row in range(self.model.rowCount(self.tree.rootIndex()))
+                    ],
+                }
+
+        self.mwindow.props['user_apps_tree_state'] = state
+
+    def restore_state(self, state : dict):
+        self.resize(QtCore.QSize(*state['size']))
+        self.move(QtCore.QPoint(*state['pos']))
+        self.tree.setCurrentIndex(self.model.index(state['tree_index']))
+        self.tree.header().setSortIndicator(state['sort_section'], QtCore.Qt.SortOrder(state['sort_order']))
+        
+        for i, width in enumerate(state['column_widths']):
+            self.tree.setColumnWidth(state['column_order'].index(i), width)
+
+
+    def expand_folders(self):
+
+        state=self.mwindow.props.get('user_apps_tree_state',None)
+        if not state:
+            return
+        
+        for folder_info in state["expanded_folders"]:
+            folder_name, expanded = folder_info
+            for row in range(self.model.rowCount(self.tree.rootIndex())):
+                index = self.model.index(row, 0, self.tree.rootIndex())
+                if index.data() == folder_name:
+                    self.tree.setExpanded(index, expanded)
+                    break
+        
+        self.model.directoryLoaded.disconnect(self.expand_folders)
+
 
     def closeEvent(self, closeEvent: QtGui.QCloseEvent) -> None:
+        self.save_state()
         self.mdi.removeSubWindow(self)
         return super().closeEvent(closeEvent)
 
@@ -1202,7 +1266,7 @@ class MT5IntegrationDialog(QtWidgets.QDialog):
         self.mt5_integration_checkbox.setChecked(self.mwindow.props.get('mt5_integration_for_linux', False))
 
         # String box for the path to the executable "Path to the executable"
-        self.python_exe_path_label = QtWidgets.QLabel('Path to python.exe(required):')
+        self.python_exe_path_label = QtWidgets.QLabel('Path to python.exe (required):')
         self.layout.addWidget(self.python_exe_path_label)
         self.python_exe_path_line_edit = QtWidgets.QLineEdit()
         self.layout.addWidget(self.python_exe_path_line_edit)
@@ -1233,7 +1297,7 @@ class MT5IntegrationDialog(QtWidgets.QDialog):
         self.layout.addWidget(self.headless_mode_label)
         explanations=\
         '''
-        On start up, the headless mode attempts to hide mt5 terminal from visibility after a small pause.
+        On start up, the headless mode hides mt5 terminal from visibility.
         The terminal continues running in the background in a headless manner.
         The mode requires xfvb package to be installed on your system. 
         '''

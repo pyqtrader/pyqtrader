@@ -198,8 +198,8 @@ class CandleBarItem(pg.GraphicsObject):
                 t=ts.ticks[index] 
                 if row.h!=row.l:
                     p.drawLine(QtCore.QPointF(t, row.l), QtCore.QPointF(t, row.h))
-                p.drawLine(QtCore.QPointF(t, row.c), QtCore.QPointF(t+w, row.c))
-                p.drawLine(QtCore.QPointF(t, row.o), QtCore.QPointF(t-w, row.o))
+                p.drawLines([QtCore.QPointF(t, row.c), QtCore.QPointF(t+w, row.c),
+                    QtCore.QPointF(t, row.o), QtCore.QPointF(t-w, row.o)])
         p.end()
     
     def paint(self, p, *args):
@@ -413,6 +413,16 @@ class dtCords:
             raise TypeError(f"adjoin() args can be dtPoint, dtCords, int or None; {type(e)} is given")
         
         return
+    
+    def remove(self, index):
+        """Removes the element at the specified index from self.cords"""
+        if index < 0:
+            index = len(self.cords) + index
+        if index < 0 or index >= len(self.cords):
+            raise IndexError("Index out of range")
+        self.cords.pop(index)
+
+        return self
 
     def zero(self):
         return dtCords([dtPoint.zero()]*len(self))

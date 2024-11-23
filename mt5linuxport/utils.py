@@ -66,7 +66,7 @@ class MT5TimeshiftWrapper:
 	# Overrides copy_rates_from_pos(), copy_rates_from(), and copy_rates_from_range()
 	# from MetaTrader5() object. View MetaTrader documentation for description of the arguments. 
 	# The original fuctions can also be used directly
-	def load_rates(self, symbol="EURUSD", timeframe=3600, 
+	def load_rates(self, symbol=cfg.D_SYMBOL, timeframe=cfg.D_TIMEFRAME, 
 					date_from=None, date_to=None,
 					count=None, start_pos=None):
 

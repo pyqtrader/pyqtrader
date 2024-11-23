@@ -1,6 +1,6 @@
 import PySide6
 from PySide6.QtWidgets import QMenu, QMdiArea
-from PySide6 import QtCore
+from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QPoint
 from importlib.machinery import SourceFileLoader
 from pyqtgraph import Point,TextItem
@@ -20,23 +20,33 @@ def invoker(mdi,fname,fpath,shortcut=None):
         if type(subw).__name__=='AltSubWindow':
             aw=subw
             break 
-       
-    if app.PQitemtype=='CurveIndicator':
-        appitem=apiCurve(aw.plt,fname=fname, fpath=fpath)
-    elif app.PQitemtype=='TrendLineIndicator':
-        appitem=apiTrendLine(aw.plt,fname=fname,fpath=fpath)
-    elif app.PQitemtype=='TextIndicator':
-        appitem=apiTextStudy(aw.plt,fname=fname,fpath=fpath)
-    elif app.PQitemtype=='HorizontalLineIndicator':
-        appitem=apiHorLine(aw.plt,fname=fname,fpath=fpath)
-    elif app.PQitemtype=="VerticalLineIndicator":
-        appitem=apiVerLine(aw.plt,fname=fname,fpath=fpath)
-    elif app.PQitemtype=='Script':
-        appitem=apiScript(aw.plt,fname=fname, fpath=fpath,shortcut=shortcut)
-    elif app.PQitemtype=='Expert':
-        appitem=apiExpert(aw.plt,fname=fname, fpath=fpath)
+
+    if not hasattr(app,"PQitemtype"):
+        simple_message_box(icon=QtWidgets.QMessageBox.Critical,
+                           text="PQitemtype not defined")
+        return
+
+    if isinstance(app.PQitemtype,str):
+        if app.PQitemtype=='CurveIndicator':
+            appitem=apiCurve(aw.plt,fname=fname, fpath=fpath)
+        elif app.PQitemtype=='TrendLineIndicator':
+            appitem=apiTrendLine(aw.plt,fname=fname,fpath=fpath)
+        elif app.PQitemtype=='TextIndicator':
+            appitem=apiTextStudy(aw.plt,fname=fname,fpath=fpath)
+        elif app.PQitemtype=='HorizontalLineIndicator':
+            appitem=apiHorLine(aw.plt,fname=fname,fpath=fpath)
+        elif app.PQitemtype=="VerticalLineIndicator":
+            appitem=apiVerLine(aw.plt,fname=fname,fpath=fpath)
+        elif app.PQitemtype=='Script':
+            appitem=apiScript(aw.plt,fname=fname, fpath=fpath,shortcut=shortcut)
+        elif app.PQitemtype=='Expert':
+            appitem=apiExpert(aw.plt,fname=fname, fpath=fpath)
+        else:
+            simple_message_box(text=app.PQitemtype+' - unknown type')
     else:
-        simple_message_box(text=app.PQitemtype+' - unknown type')
+        appitem=app.PQitemtype(aw.plt)
+    
+    return appitem
 
 class apiBase:
     sigSeriesChanged=QtCore.Signal(object)

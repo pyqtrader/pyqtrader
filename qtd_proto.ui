@@ -217,6 +217,7 @@
    <addaction name="actionDrawHorLine"/>
    <addaction name="actionDrawVerLine"/>
    <addaction name="actionDrawChannel"/>
+   <addaction name="actionDrawRegressionChannel"/>
    <addaction name="actionDrawPitchfork"/>
    <addaction name="actionDrawFibo"/>
    <addaction name="actionDrawFiboExt"/>
@@ -890,6 +891,21 @@
   <action name="actionMT5_Integration">
    <property name="text">
     <string>MT5 Integration</string>
+   </property>
+  </action>
+  <action name="actionDrawRegressionChannel">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/regression_channel.png</normaloff>Pyqtrader/.system/assets/regression_channel.png</iconset>
+   </property>
+   <property name="text">
+    <string>Regression Channel</string>
+   </property>
+   <property name="toolTip">
+    <string>Regression Channel</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
    </property>
   </action>
  </widget>

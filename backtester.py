@@ -203,8 +203,7 @@ class DrawTradeRecord (pg.GraphicsObject):
 
                 m=QPointF(0,1/to_pips(trade.symbol))
                 if trade.trade_type==TradeType.sell: m=-m
-                p.drawLine(e,e-m)
-                p.drawLine(c,c+m)
+                p.drawLines([e,e-m,c,c+m])
                 
         p.end()
 
