@@ -25,11 +25,11 @@ oa_dict={
     'M1': {'tf': 'M1','cnt':int(cfg.PERIOD_W1//cfg.PERIOD_M1)},
     'M2' : {'tf': 'M2', 'cnt':None},
     'M4' : {'tf': 'M4', 'cnt':None},
-    'M5': {'tf': 'M5', 'cnt':int(cfg.PERIOD_MN//cfg.PERIOD_M5)},
+    'M5': {'tf': 'M5', 'cnt':int(cfg.PERIOD_MN1//cfg.PERIOD_M5)},
     'M10' : {'tf': 'M10', 'cnt':None},
-    'M15': {'tf': 'M15', 'cnt':int(3*cfg.PERIOD_MN//cfg.PERIOD_M15)},
-    'M30': {'tf': 'M30', 'cnt':int(6*cfg.PERIOD_MN//cfg.PERIOD_M30)},
-    'H1' : {'tf': 'H1', 'cnt':int(18*cfg.PERIOD_MN//cfg.PERIOD_H1)},
+    'M15': {'tf': 'M15', 'cnt':int(3*cfg.PERIOD_MN1//cfg.PERIOD_M15)},
+    'M30': {'tf': 'M30', 'cnt':int(6*cfg.PERIOD_MN1//cfg.PERIOD_M30)},
+    'H1' : {'tf': 'H1', 'cnt':int(18*cfg.PERIOD_MN1//cfg.PERIOD_H1)},
     'H2' : {'tf': 'H2', 'cnt':None},
     'H3' : {'tf': 'H3', 'cnt':None},
     'H4' : {'tf': 'H4', 'cnt':int(4*cfg.PERIOD_Y1//cfg.PERIOD_H4)},
@@ -38,7 +38,7 @@ oa_dict={
     'H12' : {'tf': 'H12', 'cnt':None},
     'D'  : {'tf': 'D1', 'cnt':int(20*cfg.PERIOD_Y1//cfg.PERIOD_D1)},
     'W'  : {'tf': 'W1', 'cnt':int(20*cfg.PERIOD_Y1//cfg.PERIOD_W1)},
-    'M'  : {'tf': 'MN', 'cnt':int(20*cfg.PERIOD_Y1//cfg.PERIOD_MN)},
+    'M'  : {'tf': 'MN1', 'cnt':int(20*cfg.PERIOD_Y1//cfg.PERIOD_MN1)},
 }
 
 def tf_to_grn(tf):
@@ -237,6 +237,13 @@ class FetcherMT5(QtCore.QObject):
             return None
         ############
 
+        # There are three ways to call mt5.load_rates:
+        # 1. start_pos and count
+        # 2. date_from and date_to
+        # 3. date_from and count
+        # We need to dispatch to the proper method based on the arguments provided.
+        # We can't simply use **kwargs because the method names are different in
+        # mt5 and python.
         if fromdt is None:
             rates,error_message=self.wp.mt5.load_rates(symbol=symbol,timeframe=timeframe,
                                     start_pos=start_pos,count=count)       
@@ -263,9 +270,11 @@ class FetcherMT5(QtCore.QObject):
         df=pd.DataFrame(rates)
         # Remove unnecessary columns
         df=df.iloc[:,:5]
+
         # Remove duplicates
-        df.drop_duplicates(subset=df.columns[0], inplace=True)
-        df.reset_index(drop=True,inplace=True)
+        # df.drop_duplicates(subset=df.columns[0], inplace=True)
+        # df.reset_index(drop=True,inplace=True)
+        
         # Round prices to the point precision
         df.iloc[:,1:]=df.iloc[:,1:].round(chtl.precision(symbol)).astype(float)
         

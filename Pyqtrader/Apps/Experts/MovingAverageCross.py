@@ -1,4 +1,4 @@
-from Pyqtrader.Apps.lib import inputs
+import pandas_ta as ta
 
 PQitemtype='Expert'
 
@@ -7,7 +7,7 @@ SMAPERIOD=9
 def PQinitf(PQexpert):
     s=PQexpert.series
     PQexpert.Current_Time=s.times[-1]
-    PQexpert.Sma_Value=sum(inputs(s,start=-SMAPERIOD-1,end=-1))/SMAPERIOD
+    PQexpert.Sma_Value=sum(s.closes[-SMAPERIOD-1:])/SMAPERIOD
 
 def PQexecutef(PQexpert):
     s=PQexpert.series
@@ -15,7 +15,7 @@ def PQexecutef(PQexpert):
         PQexpert.Current_Time=s.times[-1]
         cc2=s.closes[-2]
         cc3=s.closes[-3]
-        sma0=sum(inputs(s,start=-SMAPERIOD-1,end=-1))/SMAPERIOD
+        sma0=sum(s.closes[-SMAPERIOD-1:])/SMAPERIOD
         if cc2>sma0 and cc3<=PQexpert.Sma_Value:
             t=s.times[-2]
             h=s.highs[-2]
@@ -32,4 +32,3 @@ def PQexecutef(PQexpert):
             si.set_frozen(True)
         PQexpert.Sma_Value=sma0
     
-

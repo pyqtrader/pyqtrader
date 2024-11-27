@@ -1,4 +1,9 @@
-PQitemtype='TextIndicator'
+from pyqtgraph import TextItem, Point
+
+import drawings as drws
+from api import CustomPolyitem
+
+from _debugger import _p
 
 BARSBACK=50
 TOP='\u2B99'
@@ -6,87 +11,54 @@ BOTTOM='\u2B9B'
 TOPANCHOR=0.8
 BOTTOMANCHOR=0.1
 
-def logic(PQtext,i):
-    s=PQtext.series
-    top,bottom=False,False
-    sh=s.highs
-    if sh[i-1]<sh[i]>sh[i+1] and sh[i-2]<sh[i]>sh[i+2]:
-        top=True
-    sl=s.lows
-    if sl[i-1]>sl[i]<sl[i+1] and sl[i-2]>sl[i]<sl[i+2]:
-        bottom=True
-    return top, bottom
 
-def mark(PQtext,itm,i,top):
-    s=PQtext.series
-    if top: yanch=TOPANCHOR; txt=TOP; vals=[s.times[i],s.highs[i]]
-    else: yanch=BOTTOMANCHOR; txt=BOTTOM; vals=[s.times[i],s.lows[i]]
-    itm.set_data(vals)
-    itm.set_text(txt)
-    itm.set_anchor(x=0.5,y=yanch)
+class Fractals(CustomPolyitem):
+    def __init__(self, plt: drws.AltPlotWidget,**kwargs):
+        super().__init__(plt,color='c')
 
-def place_marks(PQtext,limit=-BARSBACK):
-    for i in range(limit,-2): #-2 as requires 2 bars both ways; first identify main item position
-        lgc=logic(PQtext,i)
-        if lgc[0]:
-            mark(PQtext,PQtext,i,True)
-            starttop=True
-            newstart=i
-            break
-        elif lgc[1]:
-            mark(PQtext,PQtext,i,False)
-            starttop=False
-            newstart=i
-            break
+        self.fractals_calc()
 
-    for i in range(newstart,-2): #identify subitems' positions
-        lgc=logic(PQtext,i)
-        if lgc[0]:
-            if i==newstart and not starttop: pass
-            else:
-                si=PQtext.create_subitem('Text')
-                mark(PQtext,si,i,True)
-        elif lgc[1]:
-            if i==newstart and starttop: pass
-            else:
-                si=PQtext.create_subitem('Text')
-                mark(PQtext,si,i,False)
+        self.plt.sigTimeseriesChanged.connect(self.ts_change)
+        self.plt.lc_thread.sigLastCandleUpdated.connect(self.replot)
 
-def remove_marks(PQtext):
-    for si in list(PQtext.subitems):
-        PQtext.remove_subitem(si)
+    def ts_change(self,ts):
+        self.timeseries=ts
+        self.fractals_calc()        
+    
+    def replot(self):
+        if len(self.timeseries.closes)!=self._timeseries_length_stored:
+            self.fractals_calc()
+            self._timeseries_length_stored=len(self.timeseries.closes)
+    
+    def logic(self, barsback=BARSBACK) -> list[list[bool,int,float]]:
+        s=self.timeseries
+        fractals=[]
+        sh=s.highs[-barsback if barsback!=None else None:]
+        sl=s.lows[-barsback if barsback!=None else None:]
+        ticks=s.ticks[-barsback if barsback!=None else None:]
 
-def PQinitf(PQtext):
-    place_marks(PQtext)
-    PQtext.sigSeriesChanged.connect(PQupdatef)
+        for i in range (2,len(sh)-2):
+            if sh[i-1]<sh[i]>sh[i+1] and sh[i-2]<sh[i]>sh[i+2]:
+                fractals.append([True,ticks[i],sh[i]])
+            if sl[i-1]>sl[i]<sl[i+1] and sl[i-2]>sl[i]<sl[i+2]:
+                fractals.append([False,ticks[i],sl[i]])
+        
+        return fractals
 
-def PQupdatef(PQtext):
-    remove_marks(PQtext)
-    place_marks(PQtext)
+    @staticmethod
+    def mark(itm : TextItem, pos):
+        if pos[0]: yanch=TOPANCHOR; txt=TOP; vals=[*pos[1:]]
+        else: yanch=BOTTOMANCHOR; txt=BOTTOM; vals=[*pos[1:]]
+        itm.setPos(Point(vals))
+        itm.setPlainText(txt)
+        itm.setAnchor(Point(0.5,yanch))
+        
+    def fractals_calc(self):
+        fractals=self.logic()
+        for si in self.subitems.copy():
+            self.remove_subitem(si)
+        for f in fractals:
+            si=self.create_subitem(TextItem)
+            self.mark(si,f)
 
-def PQcomputef(PQtext):
-    for i in -4,-3: #last and interim (the one before the last) candles shifted by 2
-        te=logic(PQtext,i)
-        already_exists=False
-        for si in PQtext.subitems:
-            if si.get_data()[0]==PQtext.series.times[i]:
-                if not te[0] and not te[1]:
-                    PQtext.remove_subitem(si)
-                elif te[0] and si.text==BOTTOM:
-                    mark(PQtext,si,i,True)
-                elif not te[0] and si.text==TOP:
-                    PQtext.remove_subitem(si)
-                elif te[1] and si.text==TOP:
-                    mark(PQtext,si,i,False)
-                elif not te[1] and si.text==BOTTOM:
-                    PQtext.remove_subitem(si)
-                already_exists=True
-                break
-        if not already_exists:
-            if te[0]:
-                newsi=PQtext.create_subitem('Text')
-                mark(PQtext,newsi,i,True)
-            if te[1]:
-                newsi=PQtext.create_subitem('Text')
-                mark(PQtext,newsi,i,False)
-                
+PQitemtype=Fractals

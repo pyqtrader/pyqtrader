@@ -26,7 +26,7 @@ PERIOD_H8=28800
 PERIOD_H12=43200
 PERIOD_D1=86400
 PERIOD_W1= 5*PERIOD_D1
-PERIOD_MN=2629743
+PERIOD_MN1=2629743
 PERIOD_Y1=31556926
 
 TIMEFRAMES = {
@@ -50,7 +50,7 @@ TIMEFRAMES = {
     'H12':   PERIOD_H12,
     'D1':    PERIOD_D1,
     'W1':   PERIOD_W1,
-    'MN':  PERIOD_MN
+    'MN1':  PERIOD_MN1
 }
 
 D_PROFILE='[default]'
@@ -70,12 +70,13 @@ DX_SHIFT = 20 # default x-axis candle shift
 DY_ZOOM = 0.8 # default y-axiz zoom
 D_TIMEFRAME = PERIOD_H1 # default timeframe
 D_SYMBOL='EURUSD' #default datasource symbol
-ADJUSTED_TIMEFRAMES=(PERIOD_D1,PERIOD_W1,PERIOD_MN) #timeframes adjusted to remove time gaps (weekend etc).
+ADJUSTED_TIMEFRAMES=(PERIOD_D1,PERIOD_W1,PERIOD_MN1) #timeframes adjusted to remove time gaps (weekend etc).
 
 def tf_to_label(tf):
     for key in TIMEFRAMES:
             if TIMEFRAMES[key]==tf:
-                return key            
+                return key   
+                     
 D_TFLABEL=tf_to_label(D_TIMEFRAME)
 
 CHARTTYPES=('Bar','Candle','Line')
@@ -112,7 +113,7 @@ ACCT_FILE='acct.py'
 ACCT_DETAILS="API_KEY=''\nACCOUNT_ID=''\nOANDA_URL=''\n"
 CORE_ICON=f'{ASSETS_DIR}m-512w_bb.png'
 
-USERFILESLIST=(ACCT_FILE,'__init__.py','lib.py','MovingAverageCross.py',
+USERFILESLIST=(ACCT_FILE,'__init__.py','lib.py','MovingAverageCross.py', "DonchianChannel.py",
     'ExponentialMovingAverage.py','Fractals.py','MACD.py','RSI.py','SimpleMovingAverage.py',
     'Stochastic.py','horline.py','verline.py','PreviousHighLow.py','Ticker.py','Scroller.py')
 

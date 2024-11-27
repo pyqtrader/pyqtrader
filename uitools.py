@@ -1049,6 +1049,8 @@ class TreeSubWindow(QtWidgets.QMdiSubWindow):
         if state:
             self.restore_state(state)
 
+        self.mwindow.sigMainWindowClosing.connect(self.save_state)
+
         self.show()
 
     def populate(self):
@@ -1231,7 +1233,7 @@ class HistoryDialog(QtWidgets.QDialog):
             self.close()
         pbox=ProgressBox(name='History',text='Loading history',max=tflen-1)
         for i,tf in enumerate(checked_timeframes.values()):
-            if tf!=cfg.PERIOD_MN:
+            if tf!=cfg.PERIOD_MN1:
                 try:
                     fetcher.history(tf,symbol,session,num_bars)
                     pbox.setValue(i)

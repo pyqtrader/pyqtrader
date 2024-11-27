@@ -3,6 +3,7 @@ from PySide6 import QtWidgets,QtCore,QtGui
 import pyqtgraph as pg
 from pyqtgraph.dockarea import *
 import json, requests, os, datetime
+from importlib.machinery import SourceFileLoader
 
 import api #be sure to leave it for eval() purposes
 import cfg
@@ -225,7 +226,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionCandleChart.triggered.connect(lambda *args: self.window_act("Candle"))
         self.ui.actionLineChart.triggered.connect(lambda *args: self.window_act("Line"))
     #Timeframes
-        self.ui.actionMN.triggered.connect(lambda *args: self.window_act("MN"))
+        self.ui.actionMN.triggered.connect(lambda *args: self.window_act("MN1"))
         self.ui.actionW1.triggered.connect(lambda *args: self.window_act("W1"))
         self.ui.actionD1.triggered.connect(lambda *args: self.window_act("D1"))
         self.ui.actionH4.triggered.connect(lambda *args: self.window_act("H4"))
@@ -237,7 +238,7 @@ class MDIWindow(QtWidgets.QMainWindow):
 
         self.combo_tf=QtWidgets.QComboBox()
         self.ui.toolBarForTimeframes.addWidget(self.combo_tf)
-        self.combo_tf.insertItems(1,["MN","H12","H8","H6","H3","H2","M10","M4","M2"])
+        self.combo_tf.insertItems(1,["MN1","H12","H8","H6","H3","H2","M10","M4","M2"])
         self.combo_tf.insertSeparator(1)
         self.combo_tf.insertSeparator(7)
         self.combo_tf.activated.connect(lambda *args: self.window_act(self.combo_tf.currentText()))        
@@ -265,20 +266,22 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionEmpty_Profile_Bin.triggered.connect(self.empty_profile_bin)
 
     #Restore
-        try:
-            with open(cfg.DATA_STATES_DIR + cfg.WINDOW_STATE_FLNM, 'r') as fwin:
-                wind=fwin.read()
-                wind=json.loads(wind)
-                self.resize(*wind['window size'])
-                self.move(*wind['window position'])
-                prfs=wind['profiles'] #to ensure [default] and [deleted] are intact
-                if len(prfs)>1:
-                    self.profiles=prfs
-                props=wind['props'] 
-                self.props=props #props need to be assigned before subwindows to ensure that non-item props (like magnet)
+        if os.path.exists(cfg.DATA_STATES_DIR + cfg.WINDOW_STATE_FLNM):
+            try:
+                with open(cfg.DATA_STATES_DIR + cfg.WINDOW_STATE_FLNM, 'r') as fwin:
+                    wind=fwin.read()
+                    wind=json.loads(wind)
+                    self.resize(*wind['window size'])
+                    self.move(*wind['window position'])
+                    prfs=wind['profiles'] #to ensure [default] and [deleted] are intact
+                    if len(prfs)>1:
+                        self.profiles=prfs
+                    props=wind['props'] 
+                    self.props=props #props need to be assigned before subwindows to ensure that non-item props (like magnet)
                                 #are available before when subwindows are processed
-        except Exception as e:
-            pass
+            except Exception as e:
+                print(repr(e))
+                uitools.simple_message_box(text="Window state restore error:\n" + repr(e),icon=QtWidgets.QMessageBox.Warning)
 
         # Initiate fetcher
         self.fetch=self.fetcher_init()
@@ -291,15 +294,17 @@ class MDIWindow(QtWidgets.QMainWindow):
 
         #Open sub-windows
         #--------------------
-        try:
-            with open(cfg.DATA_STATES_DIR + cfg.PROFILE_STATE_FLNM, 'r') as fpr:
-                ps=fpr.read()
-                ps=json.loads(ps)
-                if isinstance(ps,list):
-                    self.pstate=ps
-                self.open_subw(self.pstate)
-        except Exception as e:
-            pass
+        if os.path.exists(cfg.DATA_STATES_DIR + cfg.PROFILE_STATE_FLNM):
+            try:
+                with open(cfg.DATA_STATES_DIR + cfg.PROFILE_STATE_FLNM, 'r') as fpr:
+                    ps = fpr.read()
+                    ps = json.loads(ps)
+                    if isinstance(ps, list):
+                        self.pstate = ps
+                    self.open_subw(self.pstate)
+            except Exception as e:
+                print(repr(e))
+                uitools.simple_message_box(text="Profile state restore error:\n" + repr(e), icon=QtWidgets.QMessageBox.Warning)
             #--------------------
        
         for key,val in self.props.items():# item self.props need to be processed after subwindows 
@@ -710,7 +715,7 @@ class MDIWindow(QtWidgets.QMainWindow):
                                 itype=type(item).__name__
                                 imodule=type(item).__module__
                                 try:
-                                    if item.is_persistent==True:
+                                    if getattr(item,"is_persistent", False)==True:
                                         istate=dict()
                                         istate['dock']=int(dk.title())
                                         istate['itype']=imodule+'.'+itype
@@ -720,8 +725,8 @@ class MDIWindow(QtWidgets.QMainWindow):
                                             istate['iprops']=dict(item.save_props())
                                         
                                         item_states.append(istate)
-                                except Exception:
-                                    pass
+                                except Exception as e:
+                                    print(repr(e))
 
                         subw_dict['item_states']=item_states
                         subw_dict['priceline_enabled']=subw.plt.priceline_enabled
@@ -796,13 +801,28 @@ class MDIWindow(QtWidgets.QMainWindow):
                     for ist in item_states:
                         dockname=ist['dock']
                         dockplt=subw.docks[dockname].widgets[0]
-                        if dockname==0:
-                            item=eval(ist['itype'])(plt,caller='open_subw')
-                        else:
-                            item=eval(ist['itype'])(plt,dockplt=dockplt,
-                                caller='open_subw')
-                        if item not in dockplt.listItems():
-                            dockplt.addItem(item)
+                        
+                        try:
+                            if dockname==0:
+                                item=eval(ist['itype'])(plt,caller='open_subw')
+                            else:
+                                item=eval(ist['itype'])(plt,dockplt=dockplt,
+                                    caller='open_subw')
+                            if item not in dockplt.listItems():
+                                dockplt.addItem(item)
+                        
+                        # If non-standard name, attempt to load customized user app classes 
+                        except NameError:
+                            # full path of the item class file, should be provided by save_props()
+                            # method of that class:
+                            modpath=ist['iprops'].get('fullpath',None)
+                            if modpath:
+                                module_name=modpath.split('/')[-1].split('.')[0]
+                                loader = SourceFileLoader(module_name, modpath)
+                                mod = loader.load_module()
+                                # item class name:
+                                itemname=ist['itype'].rsplit('.',1)[-1]
+                                item=mod.__getattribute__(itemname)(plt,dockplt=dockplt,caller='open_subw')
 
                         if hasattr(item,"set_dtc"):
                             item.set_dtc(ist.get('dt',[None])) #read datetime data where applicable
@@ -970,22 +990,35 @@ class MDIWindow(QtWidgets.QMainWindow):
                 chartprops=self.props['chartprops'])
             
             item=None
-            try:
-                
-                ascertained_symbol=cfg.D_SYMBOL
+
+            try:             
+                ascertained_symbol=self.props.get('default_symbol',cfg.D_SYMBOL)
                 # Handling default symbol for mt5:
                 if isinstance(self.fetch,ftch.FetcherMT5):
-                    current_symbol=self.props.get('default_symbol',cfg.D_SYMBOL)
-                    ascertained_symbol=self.fetch.ascertain_default_symbol(current_symbol)
+                    ascertained_symbol=self.fetch.ascertain_default_symbol(ascertained_symbol)
                 
                 item=self.cbl_plotter(plt, symbol=ascertained_symbol)
             
             except Exception as e:
-                for file in os.listdir(cfg.DATA_SYMBOLS_DIR):
-                    fl=chtl.filename_to_symbol(file)
-                    if fl is not None:
-                        item=self.cbl_plotter(plt,symbol=fl[0],tf=fl[1])
-                        break
+                # Find the best match of ascertained symbol cfg.TIMEFRAME timeseries
+                # among the files in cfg.DATA_SYMBOLS_DIR (saved timeseries)
+                filelist=os.listdir(cfg.DATA_SYMBOLS_DIR)
+                ascertained_list=[fl.upper() for fl in filelist 
+                                  if fl[:len(ascertained_symbol)]==ascertained_symbol.upper()]
+
+                if ascertained_list:
+                    for file in ascertained_list:
+                        fl=chtl.filename_to_symbol(file)
+                        if fl[1]==cfg.D_TIMEFRAME:
+                            break
+                else:
+                    for file in filelist:
+                        fl=chtl.filename_to_symbol(file)
+                        if fl[1]==cfg.D_TIMEFRAME:
+                            break            
+
+                item=self.cbl_plotter(plt,symbol=fl[0],tf=fl[1])
+                
             
             if item is None:
                 txt="No timeseries data available.\nYou need to login or load data manually."
@@ -1219,7 +1252,12 @@ class MDIWindow(QtWidgets.QMainWindow):
 def mainexec():
 
     import sys
-    from mt5linuxport import mt5runner
+    from mt5linuxport.mt5runner import kill_processes
+
+    # Clean up residual processes from previous sessions, if any
+    # Unfinished residual processes may lead to Segmentation fault
+    # and state data corruption
+    kill_processes("mt5linuxport","python.exe")
 
     cwd=os.getcwd()
     sys.path.append(cwd)

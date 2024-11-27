@@ -46,9 +46,16 @@ class Timeseries:
             
             # Do not retrieve exessive data
             current_time=int(time.time())
+            # In absence of a better approach, use bars to current time including off market times,
+            # in order to identify whether the file is up to date
             bars_to_current_time=1+(current_time-lc_time)//self.tf
-            datadict=self.fetch.fetch_data(session=ses,fromdt=lc_time, symbol=self.symbol,
-                timeframe=self.tf,count=min(self.count,bars_to_current_time))
+
+            if bars_to_current_time>self.count:
+                datadict=self.fetch.fetch_data(session=ses,fromdt=lc_time, symbol=self.symbol,
+                    timeframe=self.tf,count=self.count)
+            else:
+                datadict=self.fetch.fetch_data(session=ses,fromdt=lc_time, todt=current_time, symbol=self.symbol,
+                    timeframe=self.tf)
 
             # if connection is on 
             if datadict is not None:
@@ -57,11 +64,11 @@ class Timeseries:
                     up_to_date_save_exists=True
                     self.update_ts(datadict)
 
-                    # append new data to the file, [1:] to exclude already existing candle
+                    # append new data to the file
                     if self.lc_complete:
-                        datadict['data'].iloc[1:].to_csv(self.datasource,mode='a',index=None,header=None)
+                        self.data.to_csv(self.datasource,index=None,header=None)
                     else:
-                        datadict['data'].iloc[1:-1].to_csv(self.datasource,mode='a',index=None,header=None) #exclude incomplete candle
+                        self.data.iloc[:-1].to_csv(self.datasource,index=None,header=None) #exclude incomplete candle
                 # if file is obsolete(older than count)
                 else:
                     # clear the obsolete data to avoid mixing it with new data

@@ -1,15 +1,19 @@
 import PySide6
+import os, inspect
 from PySide6.QtWidgets import QMenu, QMdiArea
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QPoint
 from importlib.machinery import SourceFileLoader
+
+import pyqtgraph as pg
 from pyqtgraph import Point,TextItem
 
-import charttools as chtl, charttools
-import cfg,timeseries,studies,labelings, drawings 
+import charttools as chtl
+import cfg,studies,labelings, drawings 
 from timeseries import dtPoint, dtCords
-from _debugger import _print,_p,_printcallers,_c,_pc
 from uitools import simple_message_box
+
+from _debugger import _print,_p,_printcallers,_c,_pc
 
 def invoker(mdi,fname,fpath,shortcut=None):
     
@@ -29,14 +33,6 @@ def invoker(mdi,fname,fpath,shortcut=None):
     if isinstance(app.PQitemtype,str):
         if app.PQitemtype=='CurveIndicator':
             appitem=apiCurve(aw.plt,fname=fname, fpath=fpath)
-        elif app.PQitemtype=='TrendLineIndicator':
-            appitem=apiTrendLine(aw.plt,fname=fname,fpath=fpath)
-        elif app.PQitemtype=='TextIndicator':
-            appitem=apiTextStudy(aw.plt,fname=fname,fpath=fpath)
-        elif app.PQitemtype=='HorizontalLineIndicator':
-            appitem=apiHorLine(aw.plt,fname=fname,fpath=fpath)
-        elif app.PQitemtype=="VerticalLineIndicator":
-            appitem=apiVerLine(aw.plt,fname=fname,fpath=fpath)
         elif app.PQitemtype=='Script':
             appitem=apiScript(aw.plt,fname=fname, fpath=fpath,shortcut=shortcut)
         elif app.PQitemtype=='Expert':
@@ -135,17 +131,6 @@ class apiBase:
         
         elif itype=='Label':
             si=apiLabel(self.plt,frozen=True,persistent=False,**kwargs)
-        
-        elif itype=='TrendLine':
-            vals=chtl.zero2P() if values==(0,0) else values
-            si=_TrendLineItem(self.plt,values=vals,selectable=False,persistent=False,**kwargs)
-        
-        elif itype=='VerLine':
-            vals=0 if values==(0,0) else values
-            si=_VerLineItem(self.plt,values=vals,selectable=False,persistent=False,**kwargs)
-
-        elif itype=='HorLine':
-            si=_HorLineItem(self.plt,values=values,selectable=False,persistent=False,**kwargs)
 
         else:
             try: 
@@ -535,145 +520,156 @@ class apiCurve(apiCurveItem):
     def __init__(self, plt, fname=None, fpath=None, ts=None, **kwargs):
         super().__init__(plt, fname, fpath, ts, **kwargs)
 
-############################
-class _TrendLineItem(_apiItem,drawings.DrawTrendLine):
-    def __init__(self, plt, values=None,dialog=None,width=None,color=None,style=None,
-        selectable=True,persistent=True,caller=None,**kwargs):
-        super().__init__(plt, dialog=dialog,caller=caller)
-        penprops=dict(width=width,color=color,style=style)
-        self.set_persistent(persistent)
-        self.set_selectable(selectable)
-        for key,item in penprops.items():
-            if item is not None:
-                setattr(self,key,item)
-                self.set_props(self.props)
-        self.set_selected(False)
-        if values is not None:
-            self.set_data(values)
+###############################
 
-def api_noncurve_study_factory(base):
-    class _apiNonCurve(base):
-        def __init__(self, plt, fname=None, fpath=None, ts=None, **kwargs):
-            self.hover_on=True #use initf() to set to False
-            super().__init__(plt, fname, fpath, ts, **kwargs)
-            if hasattr(self,'caller') and self.caller!='open_subw':
-                self.plt.addItem(self)
-            self.set_persistent(True)
-            values=self.computef()
-            if values is not None:
-                self.set_data(values)
-            self.plt.lc_thread.sigLastCandleUpdated.connect(self.replot)
-            self.plt.lc_thread.sigInterimCandlesUpdated.connect(self.replot)
+class CustomItem(pg.GraphicsObject):
+    """
+    CustomItem is an abstract class derived from pyqtgraph's GraphicsObject.
+    It offers customization options for graphics rendering, such as width, color, and style.
+    The class supports maintaining coordinate buffers and handling right-click events.
+    """
 
-        def set_props(self,props):
-            super().set_props(props)
-            if hasattr(self,'caller') and self.caller=='open_subw':
-                values=self.computef()
-                if values is not None:
-                    self.set_data(values)
+    def __init__(self, plt : drawings.AltPlotWidget, **kwargs):
+        super().__init__()
+        self.is_persistent = True
+        self.props = {
+            'width': kwargs.get('width', 1),
+            'color': kwargs.get('color', None),
+            'style': kwargs.get('style', QtCore.Qt.SolidLine)
+        }
 
-        def replot(self):
-            ts=self.plt.chartitem.timeseries
-            if self.timeseries is not ts:
-                self.timeseries=ts
-            vals=self.computef()
-            if vals is not None:
-                self.set_data(vals)
+        assert isinstance(self.props['color'], (str, tuple, type(None))), \
+            f"""{self.__class__.__name__}: Color must be a str (hex or name) 
+            or tuple or None, not {type(self.props['color']).__name__} 
+            to ensure JSON serializability"""
+
+        self.pen = pg.mkPen(**self.props)
+        self.coord_buffers = []
+
+        self.plt = plt
+        self.timeseries=self.plt.chartitem.timeseries
+        self._timeseries_length_stored=len(self.timeseries.closes)
+        self.plt.addItem(self)
+
+    def add_coord_buffer(self, coord_buffer):
+        self.coord_buffers.append(coord_buffer)
+
+    def clear_coord_buffers(self):
+        self.coord_buffers = []
+
+    def mouseClickEvent(self, ev):
+        if ev.button() == QtCore.Qt.MouseButton.RightButton:
+            self.right_clicked(ev)
+    
+    def set_props(self,props):
+        self.props=props
+        self.props['style']=cfg.LINESTYLES[self.props['style']]
+        self.pen = pg.mkPen(**self.props)
+
+    def save_props(self):
+        self.props['style']=next(key for key, value in cfg.LINESTYLES.items() if value == self.props['style'])
+        self.props['fullpath'] = os.path.abspath(inspect.getfile(self.__class__))
+        return self.props
+
+    def right_clicked(self,ev):
+        ev_pos=ev.screenPos()
+        contextMenu=QtWidgets.QMenu()
+        contextMenu.addSection(self.__class__.__module__.split('/')[-1])
+        refreshAct=contextMenu.addAction('Refresh')
+        contextMenu.addSeparator()
+        remAct=contextMenu.addAction('Remove')
+        action=contextMenu.exec(QtCore.QPoint(ev_pos.x(),ev_pos.y()))
+        if action==remAct:
+            self.remove_act()
+        elif action==refreshAct:
+            self.refresh_act()
+
+    def refresh_act(self):
+        plt=self.getViewWidget()
+        plt.removeItem(self)
+        invoker(self.plt.mwindow.mdi,self.__class__.__module__.split('/')[-1],os.path.abspath(inspect.getfile(self.__class__)))
+
+    def remove_act(self):
+        plt=self.getViewWidget()
+        plt.removeItem(self)
+
+    def paint(self, p, *args):
+        raise NotImplementedError  
+    
+    def boundingRect(self):
+        if not self.coord_buffers:
+            return QtCore.QRectF()
+
+        xmin = min(x for x, y in (coord for coord_buffer in self.coord_buffers for coord in coord_buffer))
+        xmax = max(x for x, y in (coord for coord_buffer in self.coord_buffers for coord in coord_buffer))
+        ymin = min(y for x, y in (coord for coord_buffer in self.coord_buffers for coord in coord_buffer))
+        ymax = max(y for x, y in (coord for coord_buffer in self.coord_buffers for coord in coord_buffer))
+
+        return QtCore.QRectF(xmin, ymin, xmax - xmin, ymax - ymin)
+
+
+class PolylineCustomItem(CustomItem):
+
+    def paint(self, p, *args):
+        if self.coord_buffers:
+            p.setPen(self.pen)
+
+            for coord_buffer in self.coord_buffers:
+                p.drawPolyline([QtCore.QPointF(x, y) for x, y in coord_buffer])
+
+
+class MultiLineCustomItem(CustomItem):
+
+    def paint(self, p, *args):
+        if self.coord_buffers:
+            p.setPen(self.pen)
+
+            for coord_buffer in self.coord_buffers:
+                p.drawLines([QtCore.QPointF(x, y) for x, y in coord_buffer])
+
+
+class CustomPolyitem(CustomItem):
+    """Abstract class for custom poly items. It provides ability to create subitems."""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.subitems=[]
+
+    def create_subitem(self, itype, *args, **kwargs):
+        item=itype(*args, **kwargs)
+        if hasattr(item, 'is_persistent'):
+            item.is_persistent=False
+        if hasattr(item, "is_selectable"):
+            item.is_selectable=False
+        item.setParent(self)
+        self.subitems.append(item)
+        plt=self.getViewWidget()
+        plt.addItem(item)
+
+        # Connect the mouse click event of the subitem to a function
+        item.mouseClickEvent = self.mouseClickEvent
         
-        #overrides parent class ts_change, works for drawings.  Labelings should override
-        def ts_change(self,ts):
-            self.timeseries=ts
-            self.set_dtc(dtPoint(ts=ts))
-            self.replot()
-            self.plt.lc_thread.sigLastCandleUpdated.connect(self.replot)
-            self.plt.lc_thread.sigInterimCandlesUpdated.connect(self.replot)
+        return item
+    
+    def refresh_act(self):
+        for si in self.subitems.copy():
+            self.remove_subitem(si)
+        return super().refresh_act()
 
-        def ttip(self): #full override
-            sm=self.smodule
-            if hasattr(sm,'PQtooltip'):
-                return sm.PQtooltip(self)
-            else:
-                return self.fname
+    def remove_subitem(self,si):
+        si.setParent(None)
+        self.subitems.remove(si)
+        plt=self.getViewWidget()
+        plt.removeItem(si)
+    
+    def clear_subitems(self):
+        for si in list(self.subitems):
+            self.remove_subitem(si)
 
-        def remove_act(self):
-            error=None
-            self.plt.lc_thread.sigLastCandleUpdated.disconnect(self.replot)
-            self.plt.lc_thread.sigInterimCandlesUpdated.disconnect(self.replot)
-            for si in self.subitems:
-                if hasattr(si,'removal'):
-                    si.removal()
-                else:
-                    try:
-                        if hasattr(self,"dockplt"):
-                            self.dockplt.removeItem(si)
-                        else:
-                            self.plt.removeItem(si)
-                    except Exception as e:
-                        error=e
-            if error is not None:
-                simple_message_box("User Apps", text=f"Graphics object removal error: {error}")
-            return super().removal()
+    def remove_act(self):
+        for si in self.subitems.copy():
+            self.remove_subitem(si)
+        super().remove_act()
 
-    return _apiNonCurve
-
-##################################
-_apiTLItem=api_study_factory(_TrendLineItem)
-_apiTL=api_noncurve_study_factory(_apiTLItem)
-
-class apiTrendLine(_apiTL):
-    def __init__(self, plt, fname=None, fpath=None, ts=None, caller=None,**kwargs):
-        super().__init__(plt, fname, fpath, ts, selectable=False,caller=caller,**kwargs)
-
-#################################
-_apiTextStudyItem=api_study_factory(apiText)
-_apiTextStudy=api_noncurve_study_factory(_apiTextStudyItem)
-
-class apiTextStudy(_apiTextStudy):
-    def __init__(self, plt, fname=None, fpath=None, ts=None, **kwargs):
-        super().__init__(plt, fname, fpath, ts, frozen=True, **kwargs)
-            
-#################################
-class _HorLineItem(_apiItem,drawings.DrawHorLine):
-    def __init__(self, plt, values=None,dialog=None,width=None,color=None,style=None,
-        selectable=True,persistent=True,caller=None,**kwargs):
-        super().__init__(plt, dialog=dialog,caller=caller)
-        penprops=dict(width=width,color=color,style=style)
-        self.set_persistent(persistent)
-        self.set_selectable(selectable)
-        for key,item in penprops.items():
-            if item is not None:
-                setattr(self,key,item)
-                self.set_props(self.props)
-        self.set_selected(False)
-        if values is not None:
-            self.set_data(values)
-
-_apiHLItem=api_study_factory(_HorLineItem)
-_apiHL=api_noncurve_study_factory(_apiHLItem)
-
-class apiHorLine(_apiHL):
-    def __init__(self, plt, fname=None, fpath=None, ts=None, caller=None,**kwargs):
-        super().__init__(plt, fname, fpath, ts, selectable=False,caller=caller,**kwargs)
-
-#################################
-class _VerLineItem(_apiItem,drawings.DrawVerLine):
-    def __init__(self, plt, values=None,dialog=None,width=None,color=None,style=None,
-        selectable=True,persistent=True,caller=None,**kwargs):
-        super().__init__(plt, dialog=dialog,caller=caller)
-        penprops=dict(width=width,color=color,style=style)
-        self.set_persistent(persistent)
-        self.set_selectable(selectable)
-        for key,item in penprops.items():
-            if item is not None:
-                setattr(self,key,item)
-                self.set_props(self.props)
-        self.set_selected(False)
-        if values is not None:
-            self.set_data(values)
-
-_apiVLItem=api_study_factory(_VerLineItem)
-_apiVL=api_noncurve_study_factory(_apiVLItem)
-
-class apiVerLine(_apiVL):
-    def __init__(self, plt, fname=None, fpath=None, ts=None, caller=None,**kwargs):
-        super().__init__(plt, fname, fpath, ts, selectable=False,caller=caller,**kwargs)
+    def paint(self, p, *args):
+        pass

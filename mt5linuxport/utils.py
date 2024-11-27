@@ -1,11 +1,15 @@
-import os, sys, subprocess, psutil,time
-from datetime import datetime
+import os, sys, subprocess, psutil, time
+from datetime import datetime, timedelta
 from pytz import timezone, UnknownTimeZoneError
 
 import numpy as np
 
 import cfg
-from uitools import simple_message_box
+
+try:
+	from charttools import simple_message_box
+except ImportError:
+	from uitools import simple_message_box
 
 from _debugger import *
 
@@ -76,38 +80,64 @@ class MT5TimeshiftWrapper:
 		assert not (date_from and start_pos),\
 		"date_from requires count or date_to as the second argument"
 
+		assert type(date_from) in (int,datetime,np.int64,type(None)),\
+		f"date_from must be an int, datetime, or None, not {type(date_from)}"
+
+		assert type(date_to) in (int,datetime,np.int64,type(None)),\
+		f"date_from must be an int, datetime, or None, not {type(date_to)}" 
+
+		# Convert date_from and date_to to datetime
+		fts=lambda x: x if type(x) in (datetime, type(None)) else datetime.fromtimestamp(x)
+		date_from=fts(date_from)
+		date_to=fts(date_to)
+
+		assert date_to>date_from if date_from and date_to else True,\
+		"date_to must be greater than date_from"
+
 		start_pos = start_pos if start_pos is not None else 0
 
-		# Logic for date_from requests
-		if date_from:
-			date_to = date_to if date_to is not None else int(time.time())
-			period = 1 + (date_to - date_from) // timeframe
-			count=min(period, count) if count else period
-
-			start_pos=period-count if period-count>0 else 0
-
 		# Timeframe in mt5 format
-		tf=mt5_timeframe(self,cfg.tf_to_label(timeframe))
+		mt5_tf=mt5_timeframe(self,cfg.tf_to_label(timeframe))
 
 		result=None
 		check=None
 		error_message="No errors identified"
 		for i in range(7):
-			# call copy_rates_from_pos() with the calculated start_pos and count
-			result = self.original_object.copy_rates_from_pos(symbol, tf, start_pos, count)
+			# Adjustment timedeltas for mt5 datetime conventions.
+			# Also notice that the self.copy_rates_...() calls are adjusted
+			# by the class wrapper method to adjust for the timeshift
+			# between the proper unix timestamps and those stored by mt5.
+			# That's why the calls are made to self, rather than self.original_object
+
+			if date_to:
+				dfrom=date_from-timedelta(seconds=self.timeshift)
+				dto=date_to-timedelta(seconds=self.timeshift)
+				
+				result = self.copy_rates_range(symbol, mt5_tf, dfrom, dto)
+			
+			elif date_from:
+				dfrom=date_from-timedelta(seconds=self.timeshift)
+				
+				result = self.copy_rates_from(symbol, mt5_tf, dfrom, count)
+			
+			else:
+				result = self.copy_rates_from_pos(symbol, mt5_tf, start_pos, count)
 
 			# Ensure result is valid i.e. a numpy array
 			if not isinstance(result, np.ndarray):
 				continue
 
-			result['time'] += self.timeshift
-
 			check=self.validate_result(result,timeframe,date_from,start_pos)
 			if check:
 				break
+			
+			# shrink count for weekly and monthly timeframes
+			# in case of failed requests
+			# elif timeframe>cfg.TIMEFRAMES['D1'] and count is not None:
+			# 	count=count//2
 
 			time.sleep(2)
-		
+
 		if check is False:
 			result=None
 			error_message="mt5 terminal timeseries data is obsolete"
@@ -119,12 +149,16 @@ class MT5TimeshiftWrapper:
 	# Checks whether mt5 has up-to-date timeseries data
 	def validate_result(self, result, timeframe, date_from, start_pos):
 
+		# None or empty dataframe
+		if result is None or result.size==0:
+			return False
+		
 		if date_from:
-			check= (0<=result['time'][0]-date_from<timeframe)
+			check= (0<=result['time'][0]-datetime.timestamp(date_from)<timeframe)
 		else:
 			current_time=int(time.time())
 			check= (0<=(current_time-start_pos*timeframe)-result['time'][-1]<timeframe)
-		
+
 		return check
 
 def start_server(python_exe_path):
@@ -208,16 +242,19 @@ def mt5_server(python_exe_path):
 	
 	return mt5
 
-def mt5_timeframe(mt5=None,timeframe='H1'):
-    mt5=mt5 if mt5 else mt5_object()
 
+def mt5_timeframe(mt5=None,timeframe='H1'):
+	mt5=mt5 if mt5 else mt5_object()
+	
 	# Assuming the timeframe_str is something like "H1"
-    timeframe_attr = f"TIMEFRAME_{timeframe}"
-    if hasattr(mt5, timeframe_attr):
-        timeframe_value = getattr(mt5, timeframe_attr)
-        # Now you can use timeframe_value in your MetaTrader5 library calls
-        # For example:
-        # mt5.copy_rates_from_pos(symbol, timeframe_value, start_pos, count)
-        return timeframe_value
-    else:
-        raise ValueError("Invalid timeframe string")
+	timeframe_attr = f"TIMEFRAME_{timeframe}"
+	
+	if hasattr(mt5, timeframe_attr):
+		timeframe_value = getattr(mt5, timeframe_attr)
+		# Now you can use timeframe_value in your MetaTrader5 library calls
+		# For example:
+		# mt5.copy_rates_from_pos(symbol, timeframe_value, start_pos, count)
+		return timeframe_value
+	else:
+		raise ValueError("Invalid timeframe string")
+
