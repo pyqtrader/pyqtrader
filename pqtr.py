@@ -280,8 +280,9 @@ class MDIWindow(QtWidgets.QMainWindow):
                     self.props=props #props need to be assigned before subwindows to ensure that non-item props (like magnet)
                                 #are available before when subwindows are processed
             except Exception as e:
-                print(repr(e))
-                uitools.simple_message_box(text="Window state restore error:\n" + repr(e),icon=QtWidgets.QMessageBox.Warning)
+                txt="Window state restore error:\n"
+                print(txt, repr(e))
+                uitools.simple_message_box(text=txt + repr(e),icon=QtWidgets.QMessageBox.Warning)
 
         # Initiate fetcher
         self.fetch=self.fetcher_init()
@@ -303,8 +304,9 @@ class MDIWindow(QtWidgets.QMainWindow):
                         self.pstate = ps
                     self.open_subw(self.pstate)
             except Exception as e:
-                print(repr(e))
-                uitools.simple_message_box(text="Profile state restore error:\n" + repr(e), icon=QtWidgets.QMessageBox.Warning)
+                txt="Profile state restore error:\n"
+                print(txt,repr(e))
+                uitools.simple_message_box(text=txt + repr(e), icon=QtWidgets.QMessageBox.Warning)
             #--------------------
        
         for key,val in self.props.items():# item self.props need to be processed after subwindows 
@@ -561,13 +563,13 @@ class MDIWindow(QtWidgets.QMainWindow):
             self.profiles.remove(name)
             self.comboboxes_refresh()
             for record in self.pstate: #purge profile from pstate
-                rsp=record['subwindow profiles']
+                rsp=record.get('subwindow profiles',[])
                 if name in rsp:
                     rsp.remove(name)
                     if cfg.DELETED_PROFILE not in rsp:
                         rsp.append(cfg.DELETED_PROFILE)
             for subw in self.mdi.subWindowList(): #purge profile from currently active subwindows
-                if name in subw.profiles:
+                if hasattr(subw,'profiles') and name in subw.profiles:
                     subw.profiles.remove(name)
                     if cfg.DELETED_PROFILE not in subw.profiles:
                         subw.profiles.append(cfg.DELETED_PROFILE)
@@ -726,7 +728,7 @@ class MDIWindow(QtWidgets.QMainWindow):
                                         
                                         item_states.append(istate)
                                 except Exception as e:
-                                    print(repr(e))
+                                    print("save_subw_states(): ", repr(e))
 
                         subw_dict['item_states']=item_states
                         subw_dict['priceline_enabled']=subw.plt.priceline_enabled
@@ -944,7 +946,7 @@ class MDIWindow(QtWidgets.QMainWindow):
     
                 self.range_setter(plt,new_cbl_item,xl,xc,xs,yzoom=yz)
                 
-            except Exception:
+            except Exception as e:
                 pass
                     
             if plt.crosshair_enabled==True:
@@ -1003,8 +1005,8 @@ class MDIWindow(QtWidgets.QMainWindow):
                 # Find the best match of ascertained symbol cfg.TIMEFRAME timeseries
                 # among the files in cfg.DATA_SYMBOLS_DIR (saved timeseries)
                 filelist=os.listdir(cfg.DATA_SYMBOLS_DIR)
-                ascertained_list=[fl.upper() for fl in filelist 
-                                  if fl[:len(ascertained_symbol)]==ascertained_symbol.upper()]
+                ascertained_list=[fl for fl in filelist 
+                                  if fl[:len(ascertained_symbol)].upper()==ascertained_symbol.upper()]
 
                 if ascertained_list:
                     for file in ascertained_list:
@@ -1125,7 +1127,7 @@ class MDIWindow(QtWidgets.QMainWindow):
                                 if prop.upper() in cfg.TIMEFRAMES:
                                     try:
                                         cbl_replacer(self,asw.plt,prop.upper())
-                                    except Exception:
+                                    except Exception as e:
                                         uitools.simple_message_box(text='Invalid timeframe',icon=QtWidgets.QMessageBox.Warning)
                                         #print('Invalid timeframe')
                                 else:

@@ -2,7 +2,7 @@
 
 
 __all__=['_print','_printcallers','_exinfo','_c','_pc',
-         '_p','_pp','_fts',"_ptime","comparestr"]
+         '_p','_pp','_fts',"_ptime","comparestr", "_time_performance"]
 
 import inspect
 import sys
@@ -55,3 +55,14 @@ def comparestr(a, b):
     for x, y in zip(a, b):
         if x != y:
             print(x,y)
+
+# decorator
+def _time_performance(func):
+    def wrapper_timer(*args, **kwargs):
+        start_time = time.perf_counter()
+        value = func(*args, **kwargs)
+        end_time = time.perf_counter()
+        run_time = end_time - start_time
+        print(f"Finished {func.__name__!r} in {run_time*1000:.5f} ms")
+        return value
+    return wrapper_timer

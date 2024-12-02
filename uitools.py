@@ -1149,6 +1149,7 @@ class HistoryDialog(QtWidgets.QDialog):
         self.num_bars_label = QtWidgets.QLabel("Number of Timeframe Periods (including off-market):")
         self.num_bars_spinbox = QtWidgets.QSpinBox()
         self.num_bars_spinbox.setMaximum(10000000)
+        self.num_bars_spinbox.setSingleStep(100)
 
         # Ticker checkboxes
         self.ticker_checkboxes = []

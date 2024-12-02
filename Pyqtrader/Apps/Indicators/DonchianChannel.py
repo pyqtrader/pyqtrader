@@ -2,7 +2,7 @@ import numpy as np
 
 import cfg
 from drawings import AltPlotWidget
-from api import PolylineCustomItem
+from Pyqtrader.Apps.customiz import PolylineCustomItem, PenProps
 
 from _debugger import _p
 
@@ -28,7 +28,6 @@ class DonchianChannel(PolylineCustomItem):
             self._timeseries_length_stored=len(self.timeseries.closes)
 
     def calc_donchian(self):
-        self.clear_coord_buffers()
         highs=self.timeseries.data[cfg.HIGHS].iloc[-LENGTH-1 if LENGTH!=None else None:-1]
         lows=self.timeseries.data[cfg.LOWS].iloc[-LENGTH-1 if LENGTH!=None else None:-1]
         ticks=self.timeseries.ticks[-LENGTH-1 if LENGTH!=None else None:-1]
@@ -40,14 +39,20 @@ class DonchianChannel(PolylineCustomItem):
         high_line = [(t, h) for t, h in zip(ticks, highs) if not np.isnan(h)]
         # Extrapolate last element
         high_line.append((last_tick, high_line[-1][1]))
-        self.add_coord_buffer(high_line)
+        if self.is_new:
+            self.add_coord_buffer(high_line)
+        else:
+            self.update_coord_buffer(0, high_line)
         
         lows = lows.rolling(window=PERIOD).min()
         # Exclude nan
         low_line = [(t, l) for t, l in zip(ticks, lows) if not np.isnan(l)]
         # Extrapolate last element
         low_line.append((last_tick, low_line[-1][1]))
-        self.add_coord_buffer(low_line)
+        if self.is_new:
+            self.add_coord_buffer(low_line, PenProps(color='darkgreen', width=2))
+        else:
+            self.update_coord_buffer(1, low_line)
     
     
 PQitemtype=DonchianChannel

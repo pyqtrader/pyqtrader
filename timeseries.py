@@ -77,14 +77,15 @@ class Timeseries:
         # if cached timeseries file does not exist or it is obsolete (older than count)
         if not up_to_date_save_exists:
             datadict=self.fetch.fetch_data(session=ses,symbol=self.symbol,timeframe=self.tf,count=self.count)
+            
             if datadict is not None:
                 self.update_ts(datadict)
 
-            # save data to file
-            if self.lc_complete:
-                self.data.to_csv(self.datasource,index=None,header=None)
-            else:
-                self.data.iloc[:-1].to_csv(self.datasource,index=None,header=None) #exclude incomplete candle
+                # save data to file
+                if self.lc_complete:
+                    self.data.to_csv(self.datasource,index=None,header=None)
+                else:
+                    self.data.iloc[:-1].to_csv(self.datasource,index=None,header=None) #exclude incomplete candle
 
         if session is None:
             ses.close()

@@ -2,7 +2,7 @@ from PySide6 import QtCore
 
 PROGRAM_NAME='pyqtrader'
 
-VERSION='1.3'
+VERSION='1.3.1'
 
 DYNAMIC_QUERYING=True #continuous updating from the data provider, set False to turn off (no QTimer initiation) 
 
@@ -113,9 +113,10 @@ ACCT_FILE='acct.py'
 ACCT_DETAILS="API_KEY=''\nACCOUNT_ID=''\nOANDA_URL=''\n"
 CORE_ICON=f'{ASSETS_DIR}m-512w_bb.png'
 
-USERFILESLIST=(ACCT_FILE,'__init__.py','lib.py','MovingAverageCross.py', "DonchianChannel.py",
+USERFILESLIST=(ACCT_FILE,'__init__.py','MovingAverageCross.py', "DonchianChannel.py", "HullMA.py",
     'ExponentialMovingAverage.py','Fractals.py','MACD.py','RSI.py','SimpleMovingAverage.py',
-    'Stochastic.py','horline.py','verline.py','PreviousHighLow.py','Ticker.py','Scroller.py')
+    'Stochastic.py','horline.py','verline.py','PreviousHighLow.py','Ticker.py','Scroller.py',
+    "customiz.py")
 
 HANDLE_SIZE=7
 VICINITY_DISTANCE=20 #vicinity distance eg. hover distance in pixels/not used after pg bug fix
@@ -136,8 +137,25 @@ D_BARCOUNT=1000 #number of bars in a server query
 
 LEVELS_WIDTH=0.2
 
+# Regression channel
 D_REGRESSION_MULTIPLIER=2.0
 
+REGRESSION_LINE_CLOSES="Closes"
+REGRESSION_LINE_HIGHSLOWSAVG="(Highs+Lows)/2"
+REGRESSION_LINE_HIGHSLOWSCLOSESAVG="(Highs+Lows+Closes)/3"
+D_REGRESSION_LINE=REGRESSION_LINE_CLOSES
+REGRESSION_LINE_LIST=(REGRESSION_LINE_CLOSES,REGRESSION_LINE_HIGHSLOWSAVG,
+                      REGRESSION_LINE_HIGHSLOWSCLOSESAVG)
+
+LINESTDDEV_REGRESSION_MODE="LineStdDev"
+HIGHSLOWSAVG_REGRESSION_MODE="HighsLowsAvg"
+HIGHSLOWSSTDDEV_REGRESSION_MODE="HighsLowsStdDev"
+D_REGRESSION_MODE=LINESTDDEV_REGRESSION_MODE
+REGRESSION_MODE_LIST=(LINESTDDEV_REGRESSION_MODE,
+                     HIGHSLOWSAVG_REGRESSION_MODE,
+                     HIGHSLOWSSTDDEV_REGRESSION_MODE)
+
+# Studies
 D_STUDYCOLOR='#ff0000'
 D_STUDYWIDTH=1
 D_STUDYMODE='Close'

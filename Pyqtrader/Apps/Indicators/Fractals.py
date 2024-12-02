@@ -1,7 +1,7 @@
 from pyqtgraph import TextItem, Point
 
 import drawings as drws
-from api import CustomPolyitem
+from Pyqtrader.Apps.customiz import CustomPolyitem
 
 from _debugger import _p
 

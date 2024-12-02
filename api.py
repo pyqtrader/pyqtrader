@@ -4,6 +4,9 @@ from PySide6.QtWidgets import QMenu, QMdiArea
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QPoint
 from importlib.machinery import SourceFileLoader
+import dataclasses, typing
+import numpy as np
+import pandas as pd
 
 import pyqtgraph as pg
 from pyqtgraph import Point,TextItem
@@ -520,156 +523,6 @@ class apiCurve(apiCurveItem):
     def __init__(self, plt, fname=None, fpath=None, ts=None, **kwargs):
         super().__init__(plt, fname, fpath, ts, **kwargs)
 
+
+
 ###############################
-
-class CustomItem(pg.GraphicsObject):
-    """
-    CustomItem is an abstract class derived from pyqtgraph's GraphicsObject.
-    It offers customization options for graphics rendering, such as width, color, and style.
-    The class supports maintaining coordinate buffers and handling right-click events.
-    """
-
-    def __init__(self, plt : drawings.AltPlotWidget, **kwargs):
-        super().__init__()
-        self.is_persistent = True
-        self.props = {
-            'width': kwargs.get('width', 1),
-            'color': kwargs.get('color', None),
-            'style': kwargs.get('style', QtCore.Qt.SolidLine)
-        }
-
-        assert isinstance(self.props['color'], (str, tuple, type(None))), \
-            f"""{self.__class__.__name__}: Color must be a str (hex or name) 
-            or tuple or None, not {type(self.props['color']).__name__} 
-            to ensure JSON serializability"""
-
-        self.pen = pg.mkPen(**self.props)
-        self.coord_buffers = []
-
-        self.plt = plt
-        self.timeseries=self.plt.chartitem.timeseries
-        self._timeseries_length_stored=len(self.timeseries.closes)
-        self.plt.addItem(self)
-
-    def add_coord_buffer(self, coord_buffer):
-        self.coord_buffers.append(coord_buffer)
-
-    def clear_coord_buffers(self):
-        self.coord_buffers = []
-
-    def mouseClickEvent(self, ev):
-        if ev.button() == QtCore.Qt.MouseButton.RightButton:
-            self.right_clicked(ev)
-    
-    def set_props(self,props):
-        self.props=props
-        self.props['style']=cfg.LINESTYLES[self.props['style']]
-        self.pen = pg.mkPen(**self.props)
-
-    def save_props(self):
-        self.props['style']=next(key for key, value in cfg.LINESTYLES.items() if value == self.props['style'])
-        self.props['fullpath'] = os.path.abspath(inspect.getfile(self.__class__))
-        return self.props
-
-    def right_clicked(self,ev):
-        ev_pos=ev.screenPos()
-        contextMenu=QtWidgets.QMenu()
-        contextMenu.addSection(self.__class__.__module__.split('/')[-1])
-        refreshAct=contextMenu.addAction('Refresh')
-        contextMenu.addSeparator()
-        remAct=contextMenu.addAction('Remove')
-        action=contextMenu.exec(QtCore.QPoint(ev_pos.x(),ev_pos.y()))
-        if action==remAct:
-            self.remove_act()
-        elif action==refreshAct:
-            self.refresh_act()
-
-    def refresh_act(self):
-        plt=self.getViewWidget()
-        plt.removeItem(self)
-        invoker(self.plt.mwindow.mdi,self.__class__.__module__.split('/')[-1],os.path.abspath(inspect.getfile(self.__class__)))
-
-    def remove_act(self):
-        plt=self.getViewWidget()
-        plt.removeItem(self)
-
-    def paint(self, p, *args):
-        raise NotImplementedError  
-    
-    def boundingRect(self):
-        if not self.coord_buffers:
-            return QtCore.QRectF()
-
-        xmin = min(x for x, y in (coord for coord_buffer in self.coord_buffers for coord in coord_buffer))
-        xmax = max(x for x, y in (coord for coord_buffer in self.coord_buffers for coord in coord_buffer))
-        ymin = min(y for x, y in (coord for coord_buffer in self.coord_buffers for coord in coord_buffer))
-        ymax = max(y for x, y in (coord for coord_buffer in self.coord_buffers for coord in coord_buffer))
-
-        return QtCore.QRectF(xmin, ymin, xmax - xmin, ymax - ymin)
-
-
-class PolylineCustomItem(CustomItem):
-
-    def paint(self, p, *args):
-        if self.coord_buffers:
-            p.setPen(self.pen)
-
-            for coord_buffer in self.coord_buffers:
-                p.drawPolyline([QtCore.QPointF(x, y) for x, y in coord_buffer])
-
-
-class MultiLineCustomItem(CustomItem):
-
-    def paint(self, p, *args):
-        if self.coord_buffers:
-            p.setPen(self.pen)
-
-            for coord_buffer in self.coord_buffers:
-                p.drawLines([QtCore.QPointF(x, y) for x, y in coord_buffer])
-
-
-class CustomPolyitem(CustomItem):
-    """Abstract class for custom poly items. It provides ability to create subitems."""
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.subitems=[]
-
-    def create_subitem(self, itype, *args, **kwargs):
-        item=itype(*args, **kwargs)
-        if hasattr(item, 'is_persistent'):
-            item.is_persistent=False
-        if hasattr(item, "is_selectable"):
-            item.is_selectable=False
-        item.setParent(self)
-        self.subitems.append(item)
-        plt=self.getViewWidget()
-        plt.addItem(item)
-
-        # Connect the mouse click event of the subitem to a function
-        item.mouseClickEvent = self.mouseClickEvent
-        
-        return item
-    
-    def refresh_act(self):
-        for si in self.subitems.copy():
-            self.remove_subitem(si)
-        return super().refresh_act()
-
-    def remove_subitem(self,si):
-        si.setParent(None)
-        self.subitems.remove(si)
-        plt=self.getViewWidget()
-        plt.removeItem(si)
-    
-    def clear_subitems(self):
-        for si in list(self.subitems):
-            self.remove_subitem(si)
-
-    def remove_act(self):
-        for si in self.subitems.copy():
-            self.remove_subitem(si)
-        super().remove_act()
-
-    def paint(self, p, *args):
-        pass

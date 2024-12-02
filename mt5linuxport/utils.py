@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from pytz import timezone, UnknownTimeZoneError
 
 import numpy as np
+import pandas as pd
 
 import cfg
 
@@ -11,7 +12,7 @@ try:
 except ImportError:
 	from uitools import simple_message_box
 
-from _debugger import *
+from _debugger import _p, _printcallers
 
 # This wrapper class intercepts method calls, 
 # checks if the method returns a numpy array with a "time" column,
@@ -103,12 +104,23 @@ class MT5TimeshiftWrapper:
 		check=None
 		error_message="No errors identified"
 		for i in range(7):
-			# Adjustment timedeltas for mt5 datetime conventions.
-			# Also notice that the self.copy_rates_...() calls are adjusted
-			# by the class wrapper method to adjust for the timeshift
-			# between the proper unix timestamps and those stored by mt5.
-			# That's why the calls are made to self, rather than self.original_object
+			# Adjust for MT5 datetime conventions and timeshift between
+			# proper unix timestamps and those stored by MT5. The class
+			# wrapper method adjusts for the timeshift so calls are made
+			# to self, rather than self.original_object.
 
+			# Process non-standard timeframes
+			if not mt5_tf:
+				result=self._build_synthetic_timeseries_from_ticks(symbol, timeframe, date_from, date_to, count, start_pos)
+				
+				# Ensure result is valid i.e. a pandas dataframe
+				if not isinstance(result, pd.DataFrame):
+					continue
+				else:
+					check=True
+					break
+
+			# Process standard timeframes
 			if date_to:
 				dfrom=date_from-timedelta(seconds=self.timeshift)
 				dto=date_to-timedelta(seconds=self.timeshift)
@@ -142,7 +154,9 @@ class MT5TimeshiftWrapper:
 			result=None
 			error_message="mt5 terminal timeseries data is obsolete"
 		elif result is None:
-			error_message=f"mt5 object error {self.original_object.last_error()}"
+			error_message=f"mt5 object error {self.last_error()}"
+		else:
+			error_message=f"mt5 load rates: {self.last_error()}"
 
 		return result, error_message
 
@@ -160,6 +174,60 @@ class MT5TimeshiftWrapper:
 			check= (0<=(current_time-start_pos*timeframe)-result['time'][-1]<timeframe)
 
 		return check
+	
+	def _build_synthetic_timeseries_from_ticks(self,symbol, timeframe, date_from, date_to, count, start_pos):
+		"""
+		Build a synthetic time series with a specified timeframe from a numpy array of forex ticks,
+		without converting timestamps to datetime.
+
+		"""
+
+		assert timeframe in cfg.TIMEFRAMES.values(), "Timeframe not in list of supported timeframes"			
+		
+		if date_to:
+			date_from=date_from-timedelta(seconds=self.timeshift)
+			date_to=date_to-timedelta(seconds=self.timeshift)
+		
+		elif date_from:
+			date_from=date_from-timedelta(seconds=self.timeshift)
+			date_to=date_from+timedelta(seconds=count*timeframe)
+		else:
+			date_from = datetime.now() - timedelta(seconds=(start_pos + count) * timeframe) - timedelta(seconds=self.timeshift)
+			date_to=date_from+timedelta(seconds=count*timeframe)
+			
+			# Round date_from down to the nearest timeframe boundary
+			# to ensure that the interim candle is properly refreshed
+			# on a new candle formation
+			seconds_since_epoch = int(date_from.timestamp())
+			rounded_seconds = (seconds_since_epoch // timeframe) * timeframe
+			date_from = datetime.fromtimestamp(rounded_seconds)			
+
+		tick_array=self.copy_ticks_range(symbol,date_from, date_to, self.COPY_TICKS_INFO)
+	
+		# Create a pandas DataFrame from the numpy array
+		df = pd.DataFrame({'time': tick_array['time'], 'bid': tick_array['bid']})
+		
+		# Ensure the time column is integer (UNIX timestamps)
+		df['time'] = df['time'].astype(int)
+		
+		# Calculate bucket for each timestamp
+		df['bucket'] = df['time'] // timeframe * timeframe
+		
+		# Group by bucket and aggregate
+		aggregated = df.groupby('bucket').agg({
+			'bid': ['first', 'max', 'min', 'last']
+		})
+		
+		# Flatten the multi-index columns
+		aggregated.columns = ['_'.join(col).strip() for col in aggregated.columns.values]
+		
+		# Reset index to return the dataframe
+		aggregated = aggregated.reset_index()
+
+		aggregated.columns=cfg.TS_NAMES
+		
+		return aggregated
+
 
 def start_server(python_exe_path):
 		
@@ -256,5 +324,5 @@ def mt5_timeframe(mt5=None,timeframe='H1'):
 		# mt5.copy_rates_from_pos(symbol, timeframe_value, start_pos, count)
 		return timeframe_value
 	else:
-		raise ValueError("Invalid timeframe string")
+		return False
 

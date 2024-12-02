@@ -154,7 +154,7 @@ class DrawItem(DrawProps): #ROI generic abstract class
         if self.color is None:
             self.color=self.plt.graphicscolor
         
-        self.raydir=ray
+        self.raydir=ray if self.raydir is None else self.raydir
 
         self.menu_name=menu_name
         self.context_menu=self.create_menu(description=menu_name) if menu_name else None
@@ -537,7 +537,7 @@ class DrawTrendLine(DrawSegment):
         super().__init__(*args, ray=ray, menu_name=menu_name, clicks=clicks,**kwargs)
         self._cached_pos=None
         self._drawpoints=None
-        
+
     def paint(self, p, *args):
         p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, self._antialias)
         p.setPen(self.currentPen)
@@ -826,8 +826,26 @@ class DRegressionChannelDialog(DTrendLineDialog):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, exec_on=False, **kwargs)
         self.multi=self.item.multiplier
+        self.regression_mode=self.item.regression_mode
+        self.regression_line=self.item.regression_line
         self.pbox0.setReadOnly(True)
         self.pbox1.setReadOnly(True)
+
+        self.box_regline=QtWidgets.QComboBox()
+        self.box_regline.addItems(cfg.REGRESSION_LINE_LIST)
+        self.box_regline.setCurrentText(self.regression_line)
+        self.box_regline.currentTextChanged.connect(lambda x: setattr(self,'regression_line',x))
+        self.layout.addWidget(QtWidgets.QLabel('Line:'),self.order,0)
+        self.layout.addWidget(self.box_regline,self.order,1)
+        # self.order+=1
+
+        self.box_list=QtWidgets.QComboBox()
+        self.box_list.addItems(cfg.REGRESSION_MODE_LIST)
+        self.box_list.setCurrentText(self.regression_mode)
+        self.box_list.currentTextChanged.connect(lambda x: setattr(self,'regression_mode',x))
+        self.layout.addWidget(QtWidgets.QLabel('Mode:'),self.order,3)
+        self.layout.addWidget(self.box_list,self.order,4)
+        self.order+=1
 
         label=QtWidgets.QLabel('Multiplier:')
         self.box_mul=QtWidgets.QDoubleSpinBox()
@@ -842,7 +860,7 @@ class DRegressionChannelDialog(DTrendLineDialog):
         self.order+=1
 
         self.embedded_db()
-        self.exec_()
+        self.exec()
     
     # Note: the price values are calculated directly below rather than taken 
     # from the object itself to avoid bloating the code with signals
@@ -858,9 +876,17 @@ class DRegressionChannelDialog(DTrendLineDialog):
         self.pbox0.setValue(line[0])
         self.pbox1.setValue(line[-1])
 
+        self.item.regression_line=self.regression_line
+        self.item.regression_mode=self.regression_mode
         self.item.multiplier=self.multi
         
         return self.item
+    
+    def reset_defaults(self):
+        self.box_regline.setCurrentText(cfg.D_REGRESSION_LINE)
+        self.box_list.setCurrentText(cfg.D_REGRESSION_MODE)
+        self.box_mul.setValue(cfg.D_REGRESSION_MULTIPLIER)
+        return super().reset_defaults()
 
 class DrawRegressionChannel(DrawSegment):
     sigDtcChanged=QtCore.Signal(object)
@@ -886,6 +912,22 @@ class DrawRegressionChannel(DrawSegment):
     @multiplier.setter
     def multiplier(self,value):
         self.props['multiplier']=value
+
+    @property
+    def regression_mode(self):
+        return self.props.get('regression_mode',cfg.D_REGRESSION_MODE)
+
+    @regression_mode.setter
+    def regression_mode(self,value):
+        self.props['regression_mode']=value
+    
+    @property
+    def regression_line(self):
+        return self.props.get('regression_line',cfg.D_REGRESSION_LINE)
+
+    @regression_line.setter
+    def regression_line(self,value):
+        self.props['regression_line']=value
 
     def reposition(self):
         """
@@ -998,7 +1040,16 @@ class DrawRegressionChannel(DrawSegment):
             # Exchange values between x0 and x1
             _x=x0; x0=x1; x1=_x
         
-        prices=self.timeseries.closes[x0:x1+1] 
+        if self.regression_line==cfg.REGRESSION_LINE_CLOSES:
+            prices=self.timeseries.closes[x0:x1+1]
+        elif self.regression_line==cfg.REGRESSION_LINE_HIGHSLOWSAVG:
+            prices=self.timeseries.highs[x0:x1+1]+self.timeseries.lows[x0:x1+1]
+            prices=prices/2
+        elif self.regression_line==cfg.REGRESSION_LINE_HIGHSLOWSCLOSESAVG:
+            prices=self.timeseries.highs[x0:x1+1]+self.timeseries.lows[x0:x1+1]+self.timeseries.closes[x0:x1+1]
+            prices=prices/3
+        else:
+            uitools.simple_message_box("Error",text="Unknown regression line type", icon=QtGui.QMessageBox.Warning)   
         
         n = len(prices)
 
@@ -1021,16 +1072,45 @@ class DrawRegressionChannel(DrawSegment):
             # Compute the regression line
             regression_line = a + b * x
 
-            # Calculate residuals
-            residuals = prices - regression_line
+            if self.regression_mode==cfg.LINESTDDEV_REGRESSION_MODE:
+                """
+                Traditional approach
+                """
+                # Calculate residuals
+                residuals = prices - regression_line
 
-            # Calculate the standard deviation of residuals
-            std_dev = np.std(residuals)
+                # Calculate the standard deviation of residuals
+                std_dev = np.std(residuals)
+
+            elif self.regression_mode==cfg.HIGHSLOWSAVG_REGRESSION_MODE:
+
+                '''
+                High and low approach
+                '''
+                # Calculate residuals as average of maximum high deviation and maximum low deviation from the regression line
+                highs=self.timeseries.highs[x0:x1+1]
+                lows=self.timeseries.lows[x0:x1+1]
+                highs_deviation = np.max(np.abs(highs - regression_line))
+                lows_deviation = np.max(np.abs(lows - regression_line))
+                std_dev = (highs_deviation + lows_deviation)/2
+
+            elif self.regression_mode==cfg.HIGHSLOWSSTDDEV_REGRESSION_MODE:
+
+                highs=self.timeseries.highs[x0:x1+1]
+                lows=self.timeseries.lows[x0:x1+1]
+                high_residuals=highs-regression_line
+                low_residuals=lows-regression_line
+                std_dev=np.std(np.concatenate((high_residuals,low_residuals)))
+            
+            else:
+                uitools.simple_message_box("Error",text="Unknown regression mode type", icon=QtGui.QMessageBox.Warning)   
 
             # Calculate the upper and lower channel lines
             channel_width = self.multiplier * std_dev
             upper_channel = regression_line + channel_width
             lower_channel = regression_line - channel_width
+        
+
 
         return regression_line, upper_channel, lower_channel
 
@@ -1837,9 +1917,12 @@ class DrawHorLine(AltInfiniteLine):
     def create_menu(self):
         context_menu=super().create_menu(description='Horizontal Line')
         self.raydir=cfg.RAYDIR['b'] if self.raydir is None else self.raydir
-        self.ray_act=QtGui.QAction('Ray')
-        self.ray_act.setCheckable(True)
-        context_menu.insertAction(self.prop_act,self.ray_act)
+        self.ray_submenu=QtWidgets.QMenu('Ray')
+        context_menu.insertMenu(self.prop_act,self.ray_submenu)
+        self.ray_right_act=self.ray_submenu.addAction(cfg.RAYDIR['r']) 
+        self.ray_right_act.setCheckable(True)
+        self.ray_left_act=self.ray_submenu.addAction(cfg.RAYDIR['l']) 
+        self.ray_left_act.setCheckable(True)
         return context_menu
     
     def left_clicked(self, ev):
@@ -1849,16 +1932,24 @@ class DrawHorLine(AltInfiniteLine):
 
     def right_clicked(self, ev,**kwargs):
         c=self.get_dtc()
-        self.ray_act.setChecked(True if self.raydir==cfg.RAYDIR['r'] else False)
+        self.ray_right_act.setChecked(True if self.raydir==cfg.RAYDIR['r'] else False)
+        self.ray_left_act.setChecked(True if self.raydir==cfg.RAYDIR['l'] else False)
         super().right_clicked(ev,tseries=self.timeseries,dtxval=c.dt,
             yval=c.y,**kwargs)
-        if self.maction == self.ray_act:
-            if self.raydir!=cfg.RAYDIR['r']:
-                self.raydir=cfg.RAYDIR['r']
-                self.set_props(self.props)
-            else:
+        if self.maction == self.ray_right_act:
+            if self.raydir==cfg.RAYDIR['r']:
                 self.raydir=cfg.RAYDIR['b']
-                self.set_props(self.props)
+            else:
+                self.raydir=cfg.RAYDIR['r']
+            self.set_props(self.props)
+            self._computeBoundingRect() #ensure the line is redrawn
+        elif self.maction == self.ray_left_act:
+            if self.raydir==cfg.RAYDIR['l']:
+                self.raydir=cfg.RAYDIR['b']
+            else:
+                self.raydir=cfg.RAYDIR['l']
+            self.set_props(self.props)
+            self._computeBoundingRect() #ensure the line is redrawn
     
     def get_props(self):
         a=super().get_props()
@@ -1871,14 +1962,12 @@ class DrawHorLine(AltInfiniteLine):
         self.target.setHoverPen(self.color)
         self.textY.setColor(self.color)
         self.raydir=props.get('raydir',cfg.RAYDIR['b'])
+        self.update()
 
     def paint(self, p, *args):#override of the parent function
         if self.raydir is None:
             return super().paint(p, *args) #ordinary paint if no raydir is used
-        
-        if self.raydir==cfg.RAYDIR['n']: 
-            return #no paint if neither direction
-        
+              
         if self.raydir==cfg.RAYDIR['r']:
             rgt=self._endPoints[1]
             self._endPoints=(0,rgt)
@@ -1887,7 +1976,7 @@ class DrawHorLine(AltInfiniteLine):
             lft=self._endPoints[0]
             self._endPoints=(lft,0)
 
-        elif self.raydir==cfg.RAYDIR['b']:
+        elif self.raydir==cfg.RAYDIR['b'] or self.raydir==cfg.RAYDIR['n']:
             if not (self._endPoints[0] and self._endPoints[1]): #check whether any endpoint is 0
                 self._computeBoundingRect() #if so, reset self._endPoints
         else:
