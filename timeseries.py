@@ -17,7 +17,6 @@ from _debugger import *
 
 class Timeseries:
     def __init__(self,session=None,fetch=None,symbol=cfg.D_SYMBOL,timeframe=cfg.D_TIMEFRAME,count=cfg.D_BARCOUNT):
-        super().__init__()
         self.symbol=symbol
         self.timeframe=self.tf=timeframe
         self.adj=1 if self.tf in cfg.ADJUSTED_TIMEFRAMES else 0
@@ -151,6 +150,29 @@ class Timeseries:
     @property
     def closes(self):
         return self.data[cfg.CLOSES].to_numpy()
+    
+    @staticmethod
+    def get_saved_symbol(symbol,timeframe=cfg.D_TIMEFRAME):
+        
+        filelist=os.listdir(cfg.DATA_SYMBOLS_DIR)
+        ascertained_list=[fl for fl in filelist 
+                            if fl[:len(symbol)].upper()==symbol.upper()]
+
+        if ascertained_list:
+            for file in ascertained_list:
+                fl=chtl.filename_to_symbol(file)
+                if fl[1]==timeframe:
+                    break
+        else:
+            for file in filelist:
+                fl=chtl.filename_to_symbol(file)
+                if fl[1]==timeframe:
+                    break  
+       
+        symb=fl[0]            
+        tf=fl[1]
+       
+        return symb,tf
 
 ## Create a subclass of GraphicsObject.
 ## The only required methods are paint() and boundingRect() 

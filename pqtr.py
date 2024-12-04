@@ -855,7 +855,15 @@ class MDIWindow(QtWidgets.QMainWindow):
     #Plotter
     def cbl_plotter(self,plt,symbol=cfg.D_SYMBOL, ct=cfg.D_CHARTTYPE, tf=cfg.D_TIMEFRAME):
         tseries=tmss.Timeseries(session=self.session, fetch=self.fetch, symbol=symbol,
-            timeframe=tf,count=self.props['count'])      
+            timeframe=tf,count=self.props['count']) 
+        
+        # Handle data retrieval failures incl. offline symbol switches
+        # using saved data if possible
+        if tseries.data is None:
+            _symb, _tf=tmss.Timeseries.get_saved_symbol(symbol,tf)
+            tseries=tmss.Timeseries(session=self.session, fetch=self.fetch, symbol=_symb,
+                timeframe=_tf,count=self.props['count'])    
+        
         lc_item=None
         if tseries.lc_complete==True:
             item=tmss.PlotTimeseries(symbol,ct,ts=tseries,session=self.session,
@@ -1004,22 +1012,9 @@ class MDIWindow(QtWidgets.QMainWindow):
             except Exception as e:
                 # Find the best match of ascertained symbol cfg.TIMEFRAME timeseries
                 # among the files in cfg.DATA_SYMBOLS_DIR (saved timeseries)
-                filelist=os.listdir(cfg.DATA_SYMBOLS_DIR)
-                ascertained_list=[fl for fl in filelist 
-                                  if fl[:len(ascertained_symbol)].upper()==ascertained_symbol.upper()]
+                _symb,_tf=tmss.Timeseries.get_saved_symbol(ascertained_symbol)       
 
-                if ascertained_list:
-                    for file in ascertained_list:
-                        fl=chtl.filename_to_symbol(file)
-                        if fl[1]==cfg.D_TIMEFRAME:
-                            break
-                else:
-                    for file in filelist:
-                        fl=chtl.filename_to_symbol(file)
-                        if fl[1]==cfg.D_TIMEFRAME:
-                            break            
-
-                item=self.cbl_plotter(plt,symbol=fl[0],tf=fl[1])
+                item=self.cbl_plotter(plt,symbol=_symb,tf=_tf)
                 
             
             if item is None:

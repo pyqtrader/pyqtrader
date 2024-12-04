@@ -4,15 +4,12 @@ from PySide6.QtWidgets import QMenu, QMdiArea
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QPoint
 from importlib.machinery import SourceFileLoader
-import dataclasses, typing
-import numpy as np
-import pandas as pd
+import subprocess
 
-import pyqtgraph as pg
 from pyqtgraph import Point,TextItem
 
 import charttools as chtl
-import cfg,studies,labelings, drawings 
+import cfg,studies,labelings 
 from timeseries import dtPoint, dtCords
 from uitools import simple_message_box
 
@@ -432,6 +429,7 @@ def api_study_factory(base):
             contextMenu=QMenu()
             contextMenu.addSection(self.fname)
             refreshAct=contextMenu.addAction('Refresh')
+            editAct=contextMenu.addAction("Edit")
             contextMenu.addSeparator()
             remAct=contextMenu.addAction('Remove')
             action=contextMenu.exec(QPoint(ev_pos.x(),ev_pos.y()))
@@ -441,6 +439,8 @@ def api_study_factory(base):
                 self.remove_act()
                 mdi=self.plt.mwindow.mdi
                 invoker(mdi,self.fname,self.fpath)
+            elif action==editAct:
+                subprocess.run(['xdg-open', self.fpath])
 
         def save_props(self):
             a=super().save_props()

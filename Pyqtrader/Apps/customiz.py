@@ -1,7 +1,7 @@
 import PySide6
 from PySide6 import QtCore, QtWidgets
 
-import os, inspect
+import os, inspect, subprocess
 import dataclasses
 import typing
 import pyqtgraph as pg
@@ -14,13 +14,13 @@ from api import invoker
 
 from _debugger import *
 
-# TODO: flavors
+
 @dataclasses.dataclass
 class PenProps:
     width: float = 1
     color: str = None
     style: QtCore.Qt.PenStyle | str = QtCore.Qt.SolidLine
-    flavors: dict | None = None # User defined attirbutes
+    flavors: dict | None = None # User defined attributes
 
     
     def __post_init__(self):
@@ -177,6 +177,7 @@ class CustomItem(pg.GraphicsObject):
         contextMenu=QtWidgets.QMenu()
         contextMenu.addSection(self.__class__.__module__.split('/')[-1])
         refreshAct=contextMenu.addAction('Refresh')
+        editAct=contextMenu.addAction('Edit')
         contextMenu.addSeparator()
         remAct=contextMenu.addAction('Remove')
         action=contextMenu.exec(QtCore.QPoint(ev_pos.x(),ev_pos.y()))
@@ -184,6 +185,8 @@ class CustomItem(pg.GraphicsObject):
             self.remove_act()
         elif action==refreshAct:
             self.refresh_act()
+        elif action==editAct:
+            subprocess.run(['xdg-open', os.path.abspath(inspect.getfile(self.__class__))])
 
     def refresh_act(self):
         plt=self.getViewWidget()
@@ -285,10 +288,10 @@ class CustomPolyitem(CustomItem):
     def paint(self, p, *args):
         pass
 
-
+# Converts polyline to multi-segment line for drawLines() 
 def points_to_segments(values : list | np.ndarray | pd.DataFrame, sort_by: int =0,
-                       slicing=slice(1,-1), 
-                       left_slide: int = 0, right_slide: int = 0) -> pd.DataFrame:
+                       slicing=slice(1,-1),
+                       left_slide: float = 0, right_slide: float = 0) -> pd.DataFrame:
     
     assert isinstance(values, (list, np.ndarray, pd.DataFrame)), "Input values must be a list, numpy array, or pandas DataFrame"
 
@@ -299,10 +302,13 @@ def points_to_segments(values : list | np.ndarray | pd.DataFrame, sort_by: int =
     else:
         df=values.copy()
 
-    assert not df.duplicated().any(), "Input values contain duplicates"
-    
+    if df.duplicated().any():
+        duplicates = df[df.duplicated()]
+        print("Duplicates found:\n", duplicates)
+        raise ValueError("Input values contain duplicates")
+
     df = pd.concat([df, df], ignore_index=True).dropna()
-    df = df.sort_values(by=df.columns[sort_by])
+    df = df.sort_values(by=df.columns[sort_by]).reset_index(drop=True)
     
     if left_slide:
         df.iloc[::2, 0] -= left_slide
@@ -310,7 +316,7 @@ def points_to_segments(values : list | np.ndarray | pd.DataFrame, sort_by: int =
         df.iloc[1::2, 0] += right_slide
 
     if isinstance(values, pd.DataFrame):
-        return df
+        return df[slicing]
 
     df = df.to_numpy()
     if not isinstance(values, np.ndarray):
@@ -318,6 +324,7 @@ def points_to_segments(values : list | np.ndarray | pd.DataFrame, sort_by: int =
 
     return df[slicing]
 
+# Converts polyline to 2-point dots that can be streched to make dashes
 def points_to_dots(*args, **kwargs):
     return points_to_segments(*args, slicing=slice(None,None),**kwargs)
 
