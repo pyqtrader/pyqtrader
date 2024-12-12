@@ -9,7 +9,7 @@ from difflib import SequenceMatcher
 
 import cfg
 import charttools as chtl, charttools
-from mt5linuxport import utils, mt5runner
+from mt5lp import mt5utils, mt5runner
 
 from _debugger import _p,_pc,_printcallers,_exinfo,_ptime,_print
 
@@ -214,10 +214,10 @@ class FetcherMT5(QtCore.QObject):
         
         # Ensure that python.exe is specified
         if not python_exe_path:
-            utils.simple_message_box(title="Error", text="Path to python.exe must be specified in order to run mt5 integration")
+            mt5utils.simple_message_box(title="Error", text="Path to python.exe must be specified in order to run mt5 integration")
         
         elif not os.path.isfile(python_exe_path):
-                utils.simple_message_box(title="Error",text=f"python.exe at specified path:\n '{python_exe_path}'\ndoes not exist.\n"
+                mt5utils.simple_message_box(title="Error",text=f"python.exe at specified path:\n '{python_exe_path}'\ndoes not exist.\n"
                     "Path to python.exe must be correctly specified in order to run mt5 integration.")
         else:
             self.wp=mt5runner.WineProcess(exe_path=exe_path, headless_mode=headless_mode,

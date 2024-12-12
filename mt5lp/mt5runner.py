@@ -1,9 +1,9 @@
 import subprocess, psutil, os
 
 try:
-    from mt5linuxport import utils
+    from mt5lp import mt5utils
 except ImportError:
-    import utils
+    import mt5lp.mt5utils as mt5utils
 
 from _debugger import _p
 
@@ -40,9 +40,9 @@ class WineProcess:
 
             self.wine_proc = subprocess.Popen(wine_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
-        self.mt5=utils.mt5_server(python_exe_path)
+        self.mt5=mt5utils.mt5_server(python_exe_path)
         if not self.mt5.initialize():
-            utils.simple_message_box(text=f"mt5.initialize() failed, error code = {self.mt5.last_error()}")
+            mt5utils.simple_message_box(text=f"mt5.initialize() failed, error code = {self.mt5.last_error()}")
 
 
     def shutdown(self):
@@ -50,7 +50,7 @@ class WineProcess:
         if self.wine_proc:
             self.wine_proc.kill()
             self.wine_proc.wait()
-        kill_processes(self.exe_pointer,self.exe_pointer_win,"mt5linuxport", "python.exe")
+        kill_processes(self.exe_pointer,self.exe_pointer_win,"mt5lp", "python.exe")
 
 def kill_processes(*masks):
     """

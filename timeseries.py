@@ -2,41 +2,43 @@ import PySide6
 from PySide6 import QtCore,QtGui
 from pyqtgraph.graphicsItems.PlotCurveItem import PlotCurveItem
 import pyqtgraph as pg
-from pyqtgraph import Point
 import os, requests, typing, time
+from datetime import datetime
 import numpy as np
 import pandas as pd
 import dataclasses as dc
 
 import cfg
 import overrides as ovrd, overrides
-import fetcher as ftch, fetcher
 import charttools as chtl, charttools
+
+try:
+    import fetcher as ftch, fetcher
+except ImportError:
+    pass
 
 from _debugger import *
 
+
 class Timeseries:
     def __init__(self,session=None,fetch=None,symbol=cfg.D_SYMBOL,timeframe=cfg.D_TIMEFRAME,count=cfg.D_BARCOUNT):
+        ses=requests.Session() if session is None else session                                                           
+        self.fetch=fetch
         self.symbol=symbol
         self.timeframe=self.tf=timeframe
-        self.adj=1 if self.tf in cfg.ADJUSTED_TIMEFRAMES else 0
-        
-        # Weekly timeframes adjustment due to 
-        # pyqtgraph's assigning previous Saturday 
-        # as the week's candle date
-        self.wadj=2*cfg.PERIOD_D1 if self.tf==cfg.PERIOD_W1 else 0  
-                                                                    
-        ses=requests.Session() if session is None else session                                                           
+                                                                        
         self.count=count
         self.lc_complete=True
         
         self.tf_label=cfg.tf_to_label(self.tf)
         
-        self.datasource=chtl.symbol_to_filename(self.symbol,self.tf_label,True)
+        # Generate absolute path to be able to use the class externally
+        self.datasource=os.path.abspath(os.path.join(os.path.dirname(__file__),
+            chtl.symbol_to_filename(self.symbol,self.tf_label,True)))
+        
         self.data=None
 
-        self.fetch=ftch.Fetcher() if fetch is None else fetch
-
+        datadict=None
         # if cached timeseries file exists
         up_to_date_save_exists=False
         if os.path.isfile(self.datasource) and os.stat(self.datasource).st_size!=0:
@@ -49,12 +51,13 @@ class Timeseries:
             # in order to identify whether the file is up to date
             bars_to_current_time=1+(current_time-lc_time)//self.tf
 
-            if bars_to_current_time>self.count:
-                datadict=self.fetch.fetch_data(session=ses,fromdt=lc_time, symbol=self.symbol,
-                    timeframe=self.tf,count=self.count)
-            else:
-                datadict=self.fetch.fetch_data(session=ses,fromdt=lc_time, todt=current_time, symbol=self.symbol,
-                    timeframe=self.tf)
+            if self.fetch:
+                if bars_to_current_time>self.count:
+                    datadict=self.fetch.fetch_data(session=ses,fromdt=lc_time, symbol=self.symbol,
+                        timeframe=self.tf,count=self.count)
+                else:
+                    datadict=self.fetch.fetch_data(session=ses,fromdt=lc_time, todt=current_time, symbol=self.symbol,
+                        timeframe=self.tf)
 
             # if connection is on 
             if datadict is not None:
@@ -75,7 +78,8 @@ class Timeseries:
 
         # if cached timeseries file does not exist or it is obsolete (older than count)
         if not up_to_date_save_exists:
-            datadict=self.fetch.fetch_data(session=ses,symbol=self.symbol,timeframe=self.tf,count=self.count)
+            if self.fetch:
+                datadict=self.fetch.fetch_data(session=ses,symbol=self.symbol,timeframe=self.tf,count=self.count)
             
             if datadict is not None:
                 self.update_ts(datadict)
@@ -102,38 +106,29 @@ class Timeseries:
 
         return
     
-    def detimed(self,a): #conversion from ticks to index
-        return int(a//self.tf) if isinstance(a,float) else a
-    
-    def ymax(self,x0,x1): #can accept both int index and float ticks as args due to detimed()
-        
-        x0=self.detimed(x0)
-        x1=self.detimed(x1)
-
+   
+    def ymax(self,x0,x1): 
         try:
             y=max(self.highs[max(x0,0): min(x1,len(self.highs)-1)])
         except Exception:
             y=0
         return y
     
-    def ymin(self,x0,x1): #can accept both int index and float ticks as args due to detimed()
-
-        x0=self.detimed(x0)
-        x1=self.detimed(x1)
-
+    def ymin(self,x0,x1): 
         try:
             y=min(self.lows[max(x0,0): min(x1,len(self.highs)-1)])
         except Exception:
             y=0
         return y    
     
+
     @property
     def ticks(self):
-        return (self.data.index.to_numpy()+self.adj)*self.tf
+        return self.data.index.to_numpy()
 
     @property
     def times(self):
-        return self.data[cfg.TIMES].to_numpy()+self.wadj
+        return self.data[cfg.TIMES].to_numpy()
 
     @property
     def opens(self):
@@ -150,11 +145,24 @@ class Timeseries:
     @property
     def closes(self):
         return self.data[cfg.CLOSES].to_numpy()
+
+    def extended_times(self,x):
+        idx=self.data.index
+        if x<idx[0]:
+            return self.times[idx[0]]+(x-idx[0])*self.tf
+        elif x>idx[-1]:
+            return self.times[idx[-1]]+(x-idx[-1])*self.tf
+        else:
+            return self.times[x]
     
     @staticmethod
     def get_saved_symbol(symbol,timeframe=cfg.D_TIMEFRAME):
         
-        filelist=os.listdir(cfg.DATA_SYMBOLS_DIR)
+        # Generate absolute path to be able to use the method externally
+        abs_path=os.path.abspath(os.path.join(os.path.dirname(__file__),
+            cfg.DATA_SYMBOLS_DIR))
+
+        filelist=os.listdir(abs_path)
         ascertained_list=[fl for fl in filelist 
                             if fl[:len(symbol)].upper()==symbol.upper()]
 
@@ -173,6 +181,83 @@ class Timeseries:
         tf=fl[1]
        
         return symb,tf
+    
+    def sliced(self, ts_slice : slice|None=None):
+        """
+        Slice the Timeseries data.
+        
+        Parameters
+        ----------
+        ts_slice : slice or None, optional
+            The slice object to be applied to the data. If None, the entire data is returned.
+        
+        Returns
+        -------
+        TsSliced
+            A new timeseries object containing the sliced data.
+        """
+        return TsSliced(self, ts_slice)   
+    
+class TsSliced:
+    """
+    A class representing a slice of Timeseries data.
+    
+    Parameters
+    ----------
+    ts : Timeseries
+        The Timeseries object to be sliced.
+    ts_slice : slice
+        The slice to be applied to the Timeseries data.
+    
+    Attributes
+    ----------
+    ticks : numpy.ndarray
+        The array of tick values of the sliced data.
+    data : pandas.DataFrame
+        The DataFrame of the sliced data.
+    symbol : str
+        The symbol of the Timeseries.
+    timeframe : str
+        The timeframe of the Timeseries.
+    """
+    def __init__(self, ts : Timeseries, ts_slice : slice):
+        
+        x=len(ts.data)
+
+        if ts_slice:
+            assert ts_slice.step is None, "ts_slice step is not supported"
+        
+        if ts_slice.start and x <= abs(ts_slice.start):
+                ts_slice.start = None
+        
+        if ts_slice.stop and x <= abs(ts_slice.stop):
+            ts_slice.stop = None
+        
+        self.ticks=ts.ticks[ts_slice]
+        self.data=ts.data[ts_slice].reset_index(drop=True)
+        
+        self.symbol=ts.symbol
+        self.timeframe=self.tf=ts.timeframe
+    
+    @property
+    def times(self):
+        return self.data[cfg.TIMES].to_numpy()
+
+    @property
+    def opens(self):
+        return self.data[cfg.OPENS].to_numpy()
+
+    @property
+    def highs(self):
+        return self.data[cfg.HIGHS].to_numpy()
+
+    @property
+    def lows(self):
+        return self.data[cfg.LOWS].to_numpy()
+
+    @property
+    def closes(self):
+        return self.data[cfg.CLOSES].to_numpy()
 
 ## Create a subclass of GraphicsObject.
 ## The only required methods are paint() and boundingRect() 
@@ -206,8 +291,7 @@ class CandleBarItem(pg.GraphicsObject):
         ## rather than re-drawing the shapes every time.
         self.picture = QtGui.QPicture()
         p = QtGui.QPainter(self.picture)
-        # w = (self.timeseries.data[1][0] - self.timeseries.data[0][0]) / 3.
-        w = self.timeframe/3
+        w=1/3
         ts= self.timeseries
         # ensure the ticks array is initialized outside of the loops
         ticks=ts.ticks
@@ -266,7 +350,7 @@ class ChartLineItem(PlotCurveItem):
         linecolor=prs[cfg.linecolor]
         self.setPen(linecolor)
 
-def PlotTimeseries(symbol,ct,tf=None,ts=None,session=None,fetch=None,
+def plot_timeseries(symbol,ct,tf=None,ts=None,session=None,fetch=None,
     start=None,end=None,chartprops=cfg.D_CHARTPROPS):
 
     if session is None:
@@ -315,20 +399,40 @@ class dtPoint:
         y=o(self.y)-o(other.y)
         return x,y
 
-             
+    # Convert dt to x (times to index)  
     def _ti(self,dt):
-        return chtl.times_to_ticks(self.ts,dt) if self.ts is not None else None
+        tf=self.ts.tf
+        t0=self.ts.times[0]
+        t1=self.ts.times[-1]
+        x0=self.ts.data.index[0]
+        x1=self.ts.data.index[-1]
 
+        if dt<t0:
+            x=int(x0+(dt-t0)/tf)
+        elif dt>t1:
+            x=int(x1+(dt-t1)/tf)
+        else:                     
+            x = np.searchsorted(self.ts.times, dt, side='left')  # Find where `dt` fits
+            x = x - 1 if self.ts.times[x] != dt else x  # Adjust where dt==times[x] exactly
+
+        return x
+
+    # Convert x to dt (index to times)
     def _it(self,x):
-        return chtl.ticks_to_times(self.ts,x) if self.ts is not None else None
+        return self.ts.extended_times(round(x)) if self.ts is not None else None
 
     # The function caches self.dt and returns self.x,self.y for position update;
     # also sets ts if given by 'other' and updates x value correspondingly
     def apply(self,other):
-        
+
         # dt(times) and x(ticks) definitions:
         dt = self.dt
         x = self.x
+        
+        # ts definition
+        if other.ts is not None: 
+            self.ts=other.ts
+        
         # dt(times) takes precedence over x(ticks), whether x is None or not
         if other.dt is not None:
             dt=other.dt
@@ -337,20 +441,22 @@ class dtPoint:
         elif other.x is not None:
             x=other.x
             dt=self._it(x)
-        # elif self.dt is not None:
-        #     x=self._ti(self.dt)
+        elif dt is not None and other.ts is not None: # update if only new ts is given
+            x=self._ti(dt)
         
         # y(price) definition
         y=other.y if other.y is not None else self.y
+        
 
-        # ts definition
-        if other.ts is not None:
-            self.ts=other.ts
-            if dt is not None:
-                x=self._ti(dt)
+        # Fix dt values outside of allowed range
+        if dt is not None:
+            if dt>cfg.MAX_REGULAR_TIMESTAMP:
+                dt=cfg.MAX_REGULAR_TIMESTAMP-1
+            if dt<cfg.MIN_REGULAR_TIMESTAMP:
+                dt=cfg.MIN_REGULAR_TIMESTAMP+1
 
         # returns actionable values for get/setPos()/get/setState(), 
-        # simply refresh if all are None
+        # simply refreshes if all are None
         return dtPoint(dt,x,y,self.ts)
     
     # Fills None attributes in 'self' with values from 'other'.
@@ -476,3 +582,121 @@ class dtCords:
 
     def rollout(self):
         return [c.rollout() for c in self.cords]
+
+
+
+class AltAxisItem(pg.AxisItem):
+    """
+    AxisItem which displays dates from timestamps in the plot's x-axis.
+       
+    Can be added to an existing plot e.g. via 
+    :func:`setAxisItems({'bottom':axis}) <pyqtgraph.PlotItem.setAxisItems>`.
+    """
+    def __init__(self, timeseries : Timeseries, *args,
+                 chartprops=None, tz=None, **kwargs):
+        super().__init__(*args,**kwargs)
+        self.ts=timeseries
+        self.tz=tz
+
+        if chartprops is not None:
+            self.setPen(color=chartprops[cfg.foreground])
+            self.setTextPen(color=chartprops[cfg.foreground])
+            if chartprops[cfg.font] is not None:
+                if isinstance(chartprops[cfg.font],pg.QtGui.QFont):
+                    font=chartprops[cfg.font]
+                else:
+                    font=pg.QtGui.QFont()
+                    font.setFamily(chartprops[cfg.font])
+                self.setTickFont(font)
+            if chartprops[cfg.fontsize] is not None:
+                font.setPointSize(chartprops[cfg.fontsize])
+
+
+    def bar_to_datetime(self,bar):
+        """
+        Converts a bar number to a datetime object.
+
+        This function is used by the tickStrings() method to generate the text strings
+        that are used to label the ticks on the axis. The datetime object is generated
+        by converting the bar number to a timestamp using self.ts.extended_times().
+
+        :param bar: The bar number to be converted.
+        :return: A datetime object corresponding to the bar number.
+        """
+        x=self.ts.extended_times(round(bar))
+
+        # Fix x values outside of allowed range
+        if x>cfg.MAX_REGULAR_TIMESTAMP:
+            x=cfg.MAX_REGULAR_TIMESTAMP-1
+        if x<cfg.MIN_REGULAR_TIMESTAMP:
+            x=cfg.MIN_REGULAR_TIMESTAMP+1
+        
+        return datetime.fromtimestamp(x, tz=self.tz)
+
+
+    def tickStrings(self, values, scale, spacing):
+        """
+        Generates the text strings that should be associated with the tick values.
+
+        This function is called by pyqtgraph to generate the text strings that are used
+        to label the ticks on the axis. The strings are generated by converting the tick
+        values into a datetime object using self.bar_to_datetime() and then formatting
+        that datetime object using a string format that is determined by the spacing
+        of the ticks.
+
+        The format string is chosen as follows:
+            - If the ticks are spaced apart by years, the format string is '%Y'
+            - If the ticks are spaced apart by months, the format string is '%b'
+            - If the ticks are spaced apart by days, the format string is '%d'
+            - If the ticks are spaced apart by hours, the format string is '%H:%M'
+            - If the ticks are spaced apart by minutes, the format string is '%H:%M'
+
+        The generated strings are then returned as a list.
+        """
+        
+        values=[self.bar_to_datetime(v) for v in values]
+
+        format_strings=[]
+
+        try:
+            # Process first value separately
+            if len(values)>1:
+                if values[0].year != values[1].year:
+                    format_strings.append(str(values[0].year))
+                elif values[0].month != values[1].month:
+                    format_strings.append(values[0].strftime("%b"))
+                elif values[0].day != values[1].day:
+                    format_strings.append(values[0].strftime("%d"))
+                else:
+                    format_strings.append(values[0].strftime("%H:%M"))
+            
+            # Process values other than the first
+            for i, dt in enumerate(values):
+                if i>0 and dt.year != values[i - 1].year:
+                    format_strings.append(str(dt.year))
+                elif i>0 and dt.month != values[i - 1].month:
+                    format_strings.append(dt.strftime("%b"))
+                elif i>0 and dt.day != values[i - 1].day:
+                    format_strings.append(dt.strftime("%d"))
+                elif i>0:
+                    format_strings.append(dt.strftime("%H:%M"))
+        
+        except ValueError: # Windows can't handle dates before 1970 as per pg
+            format_strings.append('')
+
+        return format_strings
+
+
+    def tickValues(self, minVal, maxVal, size):
+        """
+        Compute the values used for tick marks on this axis.
+        Select major ticks only.
+
+        :param minVal: The minimum value visible on the axis.
+        :param maxVal: The maximum value visible on the axis.
+        :param size: The total size of the axis in pixels.
+        :return: A list of tuples, each tuple containing a list of x-values and a scaling factor.
+        """
+        values=super().tickValues(minVal,maxVal,size)
+
+        return [values[0]]

@@ -3,6 +3,7 @@ from PySide6 import QtWidgets,QtCore,QtGui
 import pyqtgraph as pg
 from pyqtgraph.dockarea import *
 import json, requests, os, datetime
+from zoneinfo import ZoneInfo
 from importlib.machinery import SourceFileLoader
 
 import api #be sure to leave it for eval() purposes
@@ -382,6 +383,12 @@ class MDIWindow(QtWidgets.QMainWindow):
         # self.sc_test=QtWidgets.QShortcut(QtWidgets.QKeySequence('L'), self)
         # self.sc_test.activated.connect(self.foo)
     
+    # Set up the timezone variable in the valid format
+    @property
+    def tz(self):
+        _tz=self.props.get('timezone', cfg.D_TIMEZONE[0])
+        return ZoneInfo(_tz.split(',')[0])
+
     # Encapsulate fetcher initiation
     def fetcher_init(self)->None:
         mt5_integration=self.props.get('mt5_integration_for_linux',False)
@@ -403,9 +410,9 @@ class MDIWindow(QtWidgets.QMainWindow):
 
         return fetch
 
-    #create persistent object for lambda *args: api.invoker() with arguments for
+    #create persistent object for lambda *args: api.invoke() with arguments for
     #update_api_shortcuts()
-    class _Invoke: 
+    class _Invoker: 
         def __init__(self,mdi,fname,fpath,shortcut=None) -> None:
             self.mdi=mdi
             self.fname=fname
@@ -413,7 +420,7 @@ class MDIWindow(QtWidgets.QMainWindow):
             self.shortcut=shortcut
         
         def inv(self):
-            return lambda *args: api.invoker(self.mdi,self.fname,self.fpath,shortcut=self.shortcut)
+            return lambda *args: api.invoke(self.mdi,self.fname,self.fpath,shortcut=self.shortcut)
 
     def update_api_shortcuts(self):
         for pth,sc in self.sc_api.items():
@@ -432,7 +439,7 @@ class MDIWindow(QtWidgets.QMainWindow):
                             if (s:='PQshortcut=') in (l:=line.replace(' ','')):
                                 l=l.strip(s).strip('\n').strip('"').strip("'")
                                 self.sc_api[fpath]=QtGui.QShortcut(QtGui.QKeySequence(l), self)
-                                a=self._Invoke(self.mdi,filename,fpath,shortcut=l)
+                                a=self._Invoker(self.mdi,filename,fpath,shortcut=l)
                                 self.sc_api[fpath].activated.connect(a.inv())
                                 
     def connection_status(self,s):
@@ -866,16 +873,20 @@ class MDIWindow(QtWidgets.QMainWindow):
         
         lc_item=None
         if tseries.lc_complete==True:
-            item=tmss.PlotTimeseries(symbol,ct,ts=tseries,session=self.session,
+            item=tmss.plot_timeseries(symbol,ct,ts=tseries,session=self.session,
                 fetch=self.fetch,chartprops=plt.chartprops)                
         else:
-            item=tmss.PlotTimeseries(symbol,ct,ts=tseries,session=self.session,
+            item=tmss.plot_timeseries(symbol,ct,ts=tseries,session=self.session,
                 fetch=self.fetch,end=-1,chartprops=plt.chartprops)
-            lc_item=tmss.PlotTimeseries(symbol,ct,ts=tseries,session=self.session,
+            lc_item=tmss.plot_timeseries(symbol,ct,ts=tseries,session=self.session,
                 fetch=self.fetch,start=-1,chartprops=plt.chartprops)
         plt.link_chartitem(item,lc_item)
-        xax=ovrd.AltDateAxisItem(item.times, item.ticks[-1], item.timeframe,chartprops=plt.chartprops)
-        plt.setAxisItems({"bottom":xax})
+
+        xax=tmss.AltAxisItem(tseries, "bottom", 
+                            chartprops=plt.chartprops,
+                            tz=self.tz)
+        plt.setAxisItems({"bottom":xax})   
+        
         plt.subwindow.setWindowTitle(item.symbol+","+item.tf_label+plt.description)
         plt.addItem(item)
         if lc_item!=None:
@@ -885,10 +896,10 @@ class MDIWindow(QtWidgets.QMainWindow):
 
     def range_setter(self,plt,item,last_tick=None,xcount=cfg.DX_COUNT, 
             xshift=cfg.DX_SHIFT,yzoom=cfg.DY_ZOOM):
-        tf=item.timeframe
+
         XLast=item.ticks[-1] if last_tick is None else last_tick
-        plt.setXRange(XLast-xcount*tf,XLast+xshift*tf,padding=0)
-        xl= int (XLast//tf)
+        plt.setXRange(XLast-xcount,XLast+xshift,padding=0)
+        xl= XLast
         ymax=item.ymax(xl-xcount,xl)
         ymin=item.ymin(xl-xcount,xl)
         y_adj=(1-yzoom)*(ymax-ymin)/2
@@ -905,15 +916,14 @@ class MDIWindow(QtWidgets.QMainWindow):
                         except Exception:
                             pass #print(f"The {item} item does not have a state")
                 old_cbl_item=plt.chartitem
-                old_tf=plt.chartitem.timeframe
                 xax=plt.getAxis('bottom')
-                xc =int((min(old_cbl_item.ticks[-1],xax.range[1])-xax.range[0])//old_tf)
-                xs=int((max(old_cbl_item.ticks[-1],xax.range[1])-old_cbl_item.ticks[-1])//old_tf)                       
+                xc =int((min(old_cbl_item.ticks[-1],xax.range[1])-xax.range[0]))
+                xs=int((max(old_cbl_item.ticks[-1],xax.range[1])-old_cbl_item.ticks[-1]))                       
                 
                 timepoint=None
                 if old_cbl_item.ticks[0] < xax.range[1] < old_cbl_item.ticks[-1]: 
                     for x in range(len(old_cbl_item.times)): 
-                        if xax.range[1]-old_cbl_item.ticks[x]<=old_tf:
+                        if xax.range[1]-old_cbl_item.ticks[x]<=1:
                             timepoint=old_cbl_item.times[x]
                             break
 
@@ -944,6 +954,7 @@ class MDIWindow(QtWidgets.QMainWindow):
                 
                 new_cbl_item=self.cbl_plotter(plt,symbol=new_sy,ct=new_ct, tf=new_tf)
                 
+                xl=None
                 if timepoint is None:
                     xl=new_cbl_item.ticks[-1]                          
                 else:
@@ -955,7 +966,7 @@ class MDIWindow(QtWidgets.QMainWindow):
                 self.range_setter(plt,new_cbl_item,xl,xc,xs,yzoom=yz)
                 
             except Exception as e:
-                pass
+                print("Error in cbl_replacer(): "+repr(e))
                     
             if plt.crosshair_enabled==True:
                 del plt.crosshair_item
@@ -1249,12 +1260,13 @@ class MDIWindow(QtWidgets.QMainWindow):
 def mainexec():
 
     import sys
-    from mt5linuxport.mt5runner import kill_processes
+    from mt5lp.mt5runner import kill_processes
 
     # Clean up residual processes from previous sessions, if any
     # Unfinished residual processes may lead to Segmentation fault
     # and state data corruption
-    kill_processes("mt5linuxport","python.exe")
+    if charttools.is_linux():
+        kill_processes("mt5lp","python.exe")
 
     cwd=os.getcwd()
     sys.path.append(cwd)

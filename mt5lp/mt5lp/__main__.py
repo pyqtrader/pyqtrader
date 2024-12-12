@@ -148,7 +148,7 @@ def main():
     parser.add_argument('--host', type=str, default='localhost', help='The host to connect to. The default is localhost')
     parser.add_argument('-p','--port', type=int, default=DEFAULT_SERVER_PORT, help=f'The TCP listener port (default = {DEFAULT_SERVER_PORT!r}, default for SSL = {DEFAULT_SERVER_SSL_PORT!r})')
     parser.add_argument('-w','--wine', type=str, default='wine', help='Command line to call wine program (default = wine)')
-    parser.add_argument('-s','--server', type=str, default='/tmp/mt5linuxport', help='Path where the server will be build and run (defaul = /tmp/mt5linuxport)')
+    parser.add_argument('-s','--server', type=str, default='/tmp/mt5lp', help='Path where the server will be build and run (defaul = /tmp/mt5lp)')
     args = parser.parse_args()
     #
     wine_cmd=args.wine

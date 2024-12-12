@@ -9,7 +9,7 @@ import sys
 import time, datetime
 
 myself=lambda *args: inspect.stack()[2].function
-_print=lambda *args: print(_c(),myself()+': ',*args)
+_print=lambda *args: print(_c(),myself()+': \n',*args)
 _p=_print
 
 #crashes and reboots windows 11, avoid use and import:

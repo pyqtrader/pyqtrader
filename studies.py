@@ -554,7 +554,8 @@ def study_item_factory(base):
         def xttip(self):
             tf=self.timeseries.timeframe
             x=self.dockplt.mapped_xy[0]
-            dtxs,ind=chtl.screen_to_plot(self.timeseries,x)
+            ind=round(x)
+            dtxs=self.timeseries.extended_times(x)
             if tf<cfg.PERIOD_D1:
                 xtext=dtxs.strftime("%Y-%b-%d %H:%M")
             else:

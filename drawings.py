@@ -1,5 +1,5 @@
 import PySide6
-from PySide6 import QtWidgets,QtCore,QtGui
+from PySide6 import QtWidgets,QtCore, QtGui
 import math, time, datetime
 import numpy as np
 import pyqtgraph as pg
@@ -416,6 +416,7 @@ class DTrendLineDialog(uitools.DrawPropDialog):
         
         label0=QtWidgets.QLabel('Datetime 1: ')
         self.dte[0]=QtWidgets.QDateTimeEdit()
+        self.dte[0].setTimeZone(QtCore.QTimeZone(self.plt.mwindow.tz.key.encode('utf-8')))
         self.dte[0].setDateTime(self.dts[0])
         self.dte[0].setDisplayFormat('dd.MM.yyyy hh:mm')
         self.layout.addWidget(label0,self.order,0)
@@ -435,6 +436,7 @@ class DTrendLineDialog(uitools.DrawPropDialog):
 
         label2=QtWidgets.QLabel('Datetime 2: ')
         self.dte[1]=QtWidgets.QDateTimeEdit()
+        self.dte[0].setTimeZone(QtCore.QTimeZone(self.plt.mwindow.tz.key.encode('utf-8')))
         self.dte[1].setDateTime(self.dts[1])
         self.dte[1].setDisplayFormat('dd.MM.yyyy hh:mm')
         self.layout.addWidget(label2,self.order,0)
@@ -702,6 +704,7 @@ class DChannelDialog(DTrendLineDialog):
 
         label0=QtWidgets.QLabel('Datetime 3: ')
         self.dte[2]=QtWidgets.QDateTimeEdit()
+        self.dte[2].setTimeZone(QtCore.QTimeZone(self.plt.mwindow.tz.key.encode('utf-8')))
         self.dte[2].setDateTime(self.dts[2])
         self.dte[2].setDisplayFormat('dd.MM.yyyy hh:mm')
         self.layout.addWidget(label0,self.order,0)
@@ -1362,6 +1365,7 @@ class FiboExtDialog(DTrendLineDialog):
 
         label0=QtWidgets.QLabel('Datetime 3: ')
         self.dte[2]=QtWidgets.QDateTimeEdit()
+        self.dte[2].setTimeZone(QtCore.QTimeZone(self.plt.mwindow.tz.key.encode('utf-8')))
         self.dte[2].setDateTime(self.dts[2])
         self.dte[2].setDisplayFormat('dd.MM.yyyy hh:mm')
         self.layout.addWidget(label0,self.order,0)
@@ -1740,6 +1744,7 @@ class DVLineDialog(uitools.DrawPropDialog):
         
         label=QtWidgets.QLabel('Datetime: ')
         self.vl=QtWidgets.QDateTimeEdit()
+        self.vl.setTimeZone(QtCore.QTimeZone(self.plt.mwindow.tz.key.encode('utf-8')))
         self.vl.setDateTime(self.dtxs)
         self.vl.setDisplayFormat('dd.MM.yyyy hh:mm')
         self.layout.addWidget(label,self.order,0)
@@ -1800,7 +1805,7 @@ class DrawVerLine(AltInfiniteLine):
         # get candle datetime in the current timeframe:
         # raw coords dpPoint applied to an empty dtPoint with the current timeseries
         c=dtPoint(ts=ts).apply(dtPoint(None,*self.getPos()))
-        dtx = datetime.datetime.fromtimestamp(c.dt)
+        dtx = datetime.datetime.fromtimestamp(c.dt, tz=self.plt.mwindow.tz)
        
         y0=self.ay.range[0]    
         self.textX.setPos(c.x,y0)
@@ -2235,13 +2240,14 @@ class CrossHair:
     def refresh_lc(self):
         ts=self.plt.chartitem.timeseries
         x=self.plt.mapped_xy[0]
-        dtx=chtl.ticks_to_times(ts,x)
+        dtx=ts.extended_times(round(x))
         if int(dtx)>=ts.times[-1]:
             self.refresh()
 
     def refresh(self):
         ts=self.plt.chartitem.timeseries
         tf=ts.timeframe
+        tz=self.plt.mwindow.tz
         x=self.plt.mapped_xy[0]
         y=self.plt.mapped_xy[1]
         self.vLine.setPos(x)
@@ -2251,13 +2257,17 @@ class CrossHair:
         y0=self.ay.range[0]
         y1=self.ay.range[1]    
         self.textX.setPos(x,y0)
-        dtxs,ind=chtl.screen_to_plot(ts,x)
+        
+        x=round(x)
+        dtxs=ts.extended_times(x)
+        # Assign ind to values outside the timeseries 
+        ind = min(max(ts.ticks[0], x), ts.ticks[-1])
 
         if tf>=cfg.PERIOD_D1:
-            self.textX.setText(dtxs.strftime("%d %b'%y"))
+            self.textX.setText(datetime.datetime.fromtimestamp(dtxs, tz=tz).strftime("%d %b'%y"))
             self.textX.setFontSize(cfg.D_FONTSIZE)
         else:
-            self.textX.setText(dtxs.strftime("%d %b'%y %H:%M"))
+            self.textX.setText(datetime.datetime.fromtimestamp(dtxs, tz=tz).strftime("%d %b'%y %H:%M"))
             self.textX.setFontSize(cfg.D_FONTSIZE)
         self.textY.setPos(x1,y)
         self.textY.setText("{:.{pr}f}".format(y,pr=self.pre))
@@ -2579,7 +2589,7 @@ class AltPlotWidget(pg.PlotWidget):
             symbol=ci.symbol
             ct=ci.charttype
             self.removeItem(item)
-            item=tmss.PlotTimeseries(symbol,ct,ts=ts,session=self.mwindow.session,
+            item=tmss.plot_timeseries(symbol,ct,ts=ts,session=self.mwindow.session,
                 fetch=self.mwindow.fetch,start=start,end=end,chartprops=self.chartprops)
             self.addItem(item)
         return item

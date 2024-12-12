@@ -1,8 +1,9 @@
 from PySide6 import QtCore
+from datetime import datetime
 
 PROGRAM_NAME='pyqtrader'
 
-VERSION='1.3.1'
+VERSION='1.4.0'
 
 DYNAMIC_QUERYING=True #continuous updating from the data provider, set False to turn off (no QTimer initiation) 
 
@@ -52,6 +53,10 @@ TIMEFRAMES = {
     'W1':   PERIOD_W1,
     'MN1':  PERIOD_MN1
 }
+
+MIN_REGULAR_TIMESTAMP = (datetime(1, 1, 1) - datetime(1970,1,1)).total_seconds()
+MAX_REGULAR_TIMESTAMP = (datetime(9999, 1, 1) - datetime(1970,1,1)).total_seconds()
+SEC_PER_YEAR = 365.25*24*3600
 
 D_PROFILE='[default]'
 DELETED_PROFILE='[deleted]'
@@ -299,6 +304,39 @@ TRADE_RECORD= dict(
 # GUI message timeout in seconds to avoid blocking of GUI by recurring messages,
 # eg for messages generated on every server query
 GUI_MESSAGE_TIMEOUT=30
+
+D_TIMEZONE= ('EET', 'UTC+2:00 (Eastern European Time, EET)')
+
+LISTED_TIMEZONES = [
+    D_TIMEZONE,
+    ('Etc/GMT-12', 'UTC-12:00'),
+    ('Pacific/Honolulu', 'UTC-10:00'),
+    ('America/Anchorage', 'UTC-9:00'),
+    ('America/Los_Angeles', 'UTC-8:00'),
+    ('America/Denver', 'UTC-7:00'),
+    ('America/Chicago', 'UTC-6:00'),
+    ('America/New_York', 'UTC-5:00'),
+    ('America/Halifax', 'UTC-4:00'),
+    ('America/Sao_Paulo', 'UTC-3:00'),
+    ('Atlantic/South_Georgia', 'UTC-2:00'),
+    ('Atlantic/Azores', 'UTC-1:00'),
+    ('UTC', 'UTC+0:00'),
+    ('Europe/London', 'UTC+0:00 (London)'),
+    ('Europe/Paris', 'UTC+1:00 (Central European Time, CET)'),
+    ('Europe/Athens', 'UTC+2:00 (Eastern European Time, EET)'),
+    ('Africa/Johannesburg', 'UTC+2:00'),
+    ('Europe/Moscow', 'UTC+3:00'),
+    ('Asia/Dubai', 'UTC+4:00'),
+    ('Asia/Karachi', 'UTC+5:00'),
+    ('Asia/Kolkata', 'UTC+5:30'),
+    ('Asia/Dhaka', 'UTC+6:00'),
+    ('Asia/Bangkok', 'UTC+7:00'),
+    ('Asia/Shanghai', 'UTC+8:00'),
+    ('Asia/Tokyo', 'UTC+9:00'),
+    ('Australia/Sydney', 'UTC+10:00'),
+    ('Pacific/Auckland', 'UTC+12:00'),
+]
+
 
 #Currently not in use, styles.py used instead:
 # LIGHTMODESTYLE=('''

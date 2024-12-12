@@ -881,6 +881,7 @@ class SettingsDialog(QtWidgets.QDialog):
         self.tmr=self.timer
         self.cnt=self.count
         self.ds=self.default_symbol
+        self._tz=self.tz
         self.layout=QtWidgets.QGridLayout()
         self.setLayout(self.layout)
         self.labels=[]
@@ -915,6 +916,12 @@ class SettingsDialog(QtWidgets.QDialog):
         self.attach(cbox)
         cbox.textChanged.connect(lambda *args: setattr(self,'cnt',cbox.value()))
 
+        self.labels.append(QtWidgets.QLabel('Timezone: '))
+        tzbox=QtWidgets.QComboBox()
+        tzbox.addItems([f"{x[0]}, {x[1]}" for x in cfg.LISTED_TIMEZONES])
+        tzbox.setCurrentText(self.tz)
+        self.attach(tzbox)
+        tzbox.currentTextChanged.connect(lambda *args: setattr(self,'tz',tzbox.currentText()))
 
         pmap=QtWidgets.QStyle.StandardPixmap
         pixmapi = getattr(pmap,f'SP_DialogDiscardButton')
@@ -938,13 +945,23 @@ class SettingsDialog(QtWidgets.QDialog):
         edb=EmbeddedDialogBox('Reset','Apply','Cancel','Ok',default_button=2)
         self.layout.addWidget(edb,len(self.labels)+1,0,1,0)
         edb.btn[0].clicked.connect(lambda *args: (defsym.setText(cfg.D_SYMBOL), pbox.setValue(cfg.D_TIMER),
-                                                  cbox.setValue(cfg.D_BARCOUNT)))
+                                                  cbox.setValue(cfg.D_BARCOUNT),
+                                                  tzbox.setCurrentText(cfg.D_TIMEZONE[0]+", "+cfg.D_TIMEZONE[1]),))
         edb.btn[1].clicked.connect(self.apply)
         edb.btn[2].clicked.connect(self.close)
         edb.btn[3].clicked.connect(lambda *args: self.apply(close=True))
 
         self.exec()
         
+    @property
+    def tz(self):
+        dtz=cfg.D_TIMEZONE[0]+", "+cfg.D_TIMEZONE[1]
+        return self.mwindow.props.get('timezone',dtz)
+
+    @tz.setter
+    def tz(self,x):
+        self.mwindow.props['timezone']=x
+    
     @property
     def default_symbol(self):
         return self.mwindow.props.get('default_symbol',cfg.D_SYMBOL)
@@ -975,13 +992,20 @@ class SettingsDialog(QtWidgets.QDialog):
 
     def apply(self,close=False):
         import styles
+
+        def refresh_subwindows():
+            for wnd in (mw:=self.mwindow).mdi.subWindowList():
+                mw.mdi.setActiveSubWindow(wnd)
+                mw.window_act('Refresh')
+
         if self.default_symbol!=self.ds:
             self.default_symbol=self.ds
         if self.timer!=self.tmr:
             self.timer=self.tmr
-            for wnd in (mw:=self.mwindow).mdi.subWindowList():
-                mw.mdi.setActiveSubWindow(wnd)
-                mw.window_act('Refresh')
+            refresh_subwindows()
+        if self.tz!=self._tz:
+            self._tz=self.tz
+            refresh_subwindows()
         if self.count!=self.cnt:
             self.count=self.cnt
         (mw:=self.mwindow).props['theme']=self.theme
@@ -1078,7 +1102,7 @@ class TreeSubWindow(QtWidgets.QMdiSubWindow):
         if not self.model.isDir(index):
             fpath= path.relpath(self.model.filePath(index))
             fname=path.basename(fpath)
-            api.invoker(self.mdi,fname,fpath)
+            api.invoke(self.mdi,fname,fpath)
 
     def edit_app(self):
         import subprocess

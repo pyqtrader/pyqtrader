@@ -3,7 +3,6 @@ import sys,inspect
 from pyqtgraph import Point
 from datetime import datetime
 import numpy as np
-import pandas as pd
 from pytz import timezone, UnknownTimeZoneError
 
 import overrides as ovrd,overrides
@@ -22,57 +21,6 @@ def zeroP(n): #cannot use comprehension as it works incorrectly
     for i in range(n):
         a.append(Point(0.0,0.0))
     return a
-
-def ticks_to_times(ts,x):
-    tf=ts.tf
-
-    if tf not in cfg.ADJUSTED_TIMEFRAMES:
-        if x>=ts.ticks[-1]+0.5*tf: #0.5*tf adj here and further spreads the timestamp over the width of the candle
-            result=ts.times[-1]+(x-ts.ticks[-1])
-        elif x<=ts.ticks[0]+0.5*tf:
-            result=ts.times[0]-(ts.ticks[0]-x)
-        else:
-            result=ts.times[int((x+0.5*tf)//tf)] 
-    
-    else:
-        chart_adj=1*tf 
-        if x>=ts.ticks[-1]+0.5*tf: 
-            result=ts.times[-1]+(x-ts.ticks[-1])+chart_adj
-        elif x<=ts.ticks[0]+0.5*tf:
-            result=ts.times[0]-(ts.ticks[0]-x)
-        elif ts.ticks[-2]+0.5*tf<x<ts.ticks[-1]+0.5*tf: #last candle processed individually
-            result=ts.times[-1]
-        else:
-            result=ts.times[int((x+0.5*tf-chart_adj)//tf)]
-
-    return result
-
-def times_to_ticks(ts,dt):
-    tf=ts.tf
-    chart_adj=1*tf if tf in cfg.ADJUSTED_TIMEFRAMES else 0
-    
-    if dt>ts.times[-1]+tf: #to ensure that the entire last candle's time period is covered
-        result=ts.ticks[-1]+(dt-ts.times[-1])-chart_adj
-    elif dt<=ts.times[0]:
-        result=ts.ticks[0]-(ts.times[0]-dt)
-    else:
-        i=np.where((ts.times<=dt) & (dt<ts.times+tf))[0][0]
-        result=ts.ticks[i]
-    
-    return result
-
-def screen_to_plot(ts,x):
-    dtx=ticks_to_times(ts,x)
-    dtxs = datetime.fromtimestamp(dtx)
-    
-    tf=ts.timeframe
-    chart_adj=tf if tf in cfg.ADJUSTED_TIMEFRAMES else 0
-    if int(dtx)>ts.times[-1]:
-        ind=-1
-    else:
-        ind=int((x+0.5*tf-chart_adj)//tf)
-
-    return dtxs,ind
 
 def item_is_draw(item):
     if hasattr(item,"is_draw"):
@@ -181,11 +129,11 @@ def set_chart(plt,symbol=None,timeframe=None):
     old_lc_item=plt.lc_item
     symb=symbol if symbol is not None else old_item.symbol
     timef=timeframe if timeframe is not None else old_item.timeframe
-    tk=(ts:=old_item.timeseries).ticks[-1]
+    tk=old_item.timeseries.ticks[-1]
     ax0=(ax:=plt.getAxis('bottom')).range[0]
     ax1=ax.range[1]
-    cnt=int((tk-ax0)//ts.tf)
-    shf=int((ax1-tk)//ts.tf)
+    cnt=int(tk-ax0)
+    shf=int(ax1-tk)
     try:
         try:
             plt.removeItem(old_lc_item)

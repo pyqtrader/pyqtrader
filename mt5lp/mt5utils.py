@@ -145,8 +145,8 @@ class MT5TimeshiftWrapper:
 			
 			# shrink count for weekly and monthly timeframes
 			# in case of failed requests
-			# elif timeframe>cfg.TIMEFRAMES['D1'] and count is not None:
-			# 	count=count//2
+			elif timeframe>cfg.TIMEFRAMES['D1'] and count is not None:
+				count=count//2
 
 			time.sleep(2)
 
@@ -233,13 +233,13 @@ def start_server(python_exe_path):
 		
 	try:
 		dirpath=os.path.dirname(__file__)
-		subprocess.run(f"python3 {dirpath}/mt5linuxport/__main__.py '{python_exe_path}' &", shell=True)
+		subprocess.run(f"python3 {dirpath}/mt5lp/__main__.py '{python_exe_path}' &", shell=True)
 	except Exception as e:
 		print(f"Error running server: {repr(e)}")
 		simple_message_box(f"Error running server: {repr(e)}")
 
 def check_server_running(string=None):
-	string=string if string else 'mt5linuxport/server'
+	string=string if string else 'mt5lp/server'
 	for proc in psutil.process_iter():
 		if proc.status() != psutil.STATUS_ZOMBIE:
 			for part in proc.cmdline():
@@ -271,9 +271,9 @@ def mt5_object():
 	if Platform.startswith('linux'):
 		print(f"{Platform=}")
 		try:
-			from .mt5linuxport import MetaTrader5
+			from .mt5lp import MetaTrader5
 		except:
-			from mt5linuxport import MetaTrader5
+			from mt5lp import MetaTrader5
 		
 		max_attempts=10
 		attempt=1

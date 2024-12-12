@@ -1,5 +1,4 @@
 import PySide6
-import os, inspect
 from PySide6.QtWidgets import QMenu, QMdiArea
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QPoint
@@ -15,7 +14,7 @@ from uitools import simple_message_box
 
 from _debugger import _print,_p,_printcallers,_c,_pc
 
-def invoker(mdi,fname,fpath,shortcut=None):
+def invoke(mdi,fname,fpath,shortcut=None):
     
     # imports the module from the given path
     app = SourceFileLoader(fname,fpath).load_module()
@@ -438,7 +437,7 @@ def api_study_factory(base):
             elif action==refreshAct:
                 self.remove_act()
                 mdi=self.plt.mwindow.mdi
-                invoker(mdi,self.fname,self.fpath)
+                invoke(mdi,self.fname,self.fpath)
             elif action==editAct:
                 subprocess.run(['xdg-open', self.fpath])
 

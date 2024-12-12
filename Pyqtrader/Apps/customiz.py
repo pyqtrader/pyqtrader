@@ -10,7 +10,7 @@ import pandas as pd
 
 import cfg
 import drawings
-from api import invoker
+from api import invoke
 
 from _debugger import *
 
@@ -191,7 +191,7 @@ class CustomItem(pg.GraphicsObject):
     def refresh_act(self):
         plt=self.getViewWidget()
         plt.removeItem(self)
-        invoker(self.plt.mwindow.mdi,self.__class__.__module__.split('/')[-1],os.path.abspath(inspect.getfile(self.__class__)))
+        invoke(self.plt.mwindow.mdi,self.__class__.__module__.split('/')[-1],os.path.abspath(inspect.getfile(self.__class__)))
 
     def remove_act(self):
         plt=self.getViewWidget()
@@ -260,7 +260,7 @@ class CustomPolyitem(CustomItem):
         plt=self.getViewWidget()
         plt.addItem(item)
 
-        # Connect the mouse click event of the subitem to a function
+        # Connect the mouse click event of the subitem to the parent function
         item.mouseClickEvent = self.mouseClickEvent
         
         return item

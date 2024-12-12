@@ -14,7 +14,7 @@ acct.py
 !symbols/
 !examples/
 !Files/
-!mt5linuxport/
+!mt5lp/
 
 !requirements.txt
 !MODEL_H1.csv
