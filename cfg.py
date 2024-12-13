@@ -88,7 +88,7 @@ CHARTTYPES=('Bar','Candle','Line')
 D_CHARTTYPE='Bar'
 
 #Timeseries names
-TICKS='i'
+BARS='i'
 TIMES='t'
 OPENS='o'
 HIGHS='h'

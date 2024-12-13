@@ -35,13 +35,13 @@ class Fractals(CustomPolyitem):
         fractals=[]
         sh=s.highs[-barsback if barsback!=None else None:]
         sl=s.lows[-barsback if barsback!=None else None:]
-        ticks=s.ticks[-barsback if barsback!=None else None:]
+        bars=s.bars[-barsback if barsback!=None else None:]
 
         for i in range (2,len(sh)-2):
             if sh[i-1]<sh[i]>sh[i+1] and sh[i-2]<sh[i]>sh[i+2]:
-                fractals.append([True,ticks[i],sh[i]])
+                fractals.append([True,bars[i],sh[i]])
             if sl[i-1]>sl[i]<sl[i+1] and sl[i-2]>sl[i]<sl[i+2]:
-                fractals.append([False,ticks[i],sl[i]])
+                fractals.append([False,bars[i],sl[i]])
         
         return fractals
 

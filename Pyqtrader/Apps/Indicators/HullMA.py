@@ -39,7 +39,7 @@ class HullMA(MultiLineCustomItem):
         prices=ts.data[cfg.CLOSES]
         hma = ta.hma(prices, length=length)
 
-        hma = pd.DataFrame({'tick': ts.ticks, 'hma': hma}).dropna()
+        hma = pd.DataFrame({'tick': ts.bars, 'hma': hma}).dropna()
 
         # Convert to segments, which is a format suitable to Qt's drawLines()     
         hma=points_to_segments(hma)

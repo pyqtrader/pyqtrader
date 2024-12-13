@@ -123,7 +123,7 @@ class Timeseries:
     
 
     @property
-    def ticks(self):
+    def bars(self):
         return self.data.index.to_numpy()
 
     @property
@@ -211,7 +211,7 @@ class TsSliced:
     
     Attributes
     ----------
-    ticks : numpy.ndarray
+    bars : numpy.ndarray
         The array of tick values of the sliced data.
     data : pandas.DataFrame
         The DataFrame of the sliced data.
@@ -233,7 +233,7 @@ class TsSliced:
         if ts_slice.stop and x <= abs(ts_slice.stop):
             ts_slice.stop = None
         
-        self.ticks=ts.ticks[ts_slice]
+        self.bars=ts.bars[ts_slice]
         self.data=ts.data[ts_slice].reset_index(drop=True)
         
         self.symbol=ts.symbol
@@ -272,7 +272,7 @@ class CandleBarItem(pg.GraphicsObject):
         self.datasource=timeseries.datasource        
         self.timeframe=self.tf=timeseries.timeframe
         self.tf_label=timeseries.tf_label
-        self.ticks=timeseries.ticks
+        self.bars=timeseries.bars
         self.times=timeseries.times
         self.highs=timeseries.highs
         self.lows=timeseries.lows
@@ -293,12 +293,12 @@ class CandleBarItem(pg.GraphicsObject):
         p = QtGui.QPainter(self.picture)
         w=1/3
         ts= self.timeseries
-        # ensure the ticks array is initialized outside of the loops
-        ticks=ts.ticks
+        # ensure the bars array is initialized outside of the loops
+        bars=ts.bars
         if(charttype=='Candle'):
             p.setPen(pg.mkPen(self.chartprops[cfg.framecolor],width=0.7)) 
             for index,row in ts.data[self.start:self.end].iterrows():                
-                t=ticks[index]
+                t=bars[index]
                 if row.h!=row.l:
                     p.drawLine(QtCore.QPointF(t, row.l), QtCore.QPointF(t, row.h))
                 if row.o > row.c:
@@ -309,7 +309,7 @@ class CandleBarItem(pg.GraphicsObject):
         elif(charttype=='Bar'):
             p.setPen(pg.mkPen(self.chartprops[cfg.barcolor],width=0.7))
             for index,row in ts.data[self.start:self.end].iterrows():
-                t=ts.ticks[index] 
+                t=ts.bars[index] 
                 if row.h!=row.l:
                     p.drawLine(QtCore.QPointF(t, row.l), QtCore.QPointF(t, row.h))
                 p.drawLines([QtCore.QPointF(t, row.c), QtCore.QPointF(t+w, row.c),
@@ -329,7 +329,7 @@ class ChartLineItem(PlotCurveItem):
     def __init__(self,timeseries,start=None,end=None,chartprops=cfg.D_CHARTPROPS):
         if start!=None:
             start=start-1
-        super().__init__(timeseries.ticks[start:end],timeseries.closes[start:end])
+        super().__init__(timeseries.bars[start:end],timeseries.closes[start:end])
         self.is_cbl=True
         self.timeseries=timeseries
         self.charttype='Line'
@@ -337,7 +337,7 @@ class ChartLineItem(PlotCurveItem):
         self.datasource=timeseries.datasource
         self.timeframe=self.tf=timeseries.timeframe
         self.tf_label=timeseries.tf_label
-        self.ticks=timeseries.ticks
+        self.bars=timeseries.bars
         self.times=timeseries.times
         self.highs=timeseries.highs
         self.lows=timeseries.lows
@@ -425,7 +425,7 @@ class dtPoint:
     # also sets ts if given by 'other' and updates x value correspondingly
     def apply(self,other):
 
-        # dt(times) and x(ticks) definitions:
+        # dt(times) and x(bars) definitions:
         dt = self.dt
         x = self.x
         
@@ -433,7 +433,7 @@ class dtPoint:
         if other.ts is not None: 
             self.ts=other.ts
         
-        # dt(times) takes precedence over x(ticks), whether x is None or not
+        # dt(times) takes precedence over x(bars), whether x is None or not
         if other.dt is not None:
             dt=other.dt
             x=self._ti(dt) 
@@ -643,13 +643,6 @@ class AltAxisItem(pg.AxisItem):
         values into a datetime object using self.bar_to_datetime() and then formatting
         that datetime object using a string format that is determined by the spacing
         of the ticks.
-
-        The format string is chosen as follows:
-            - If the ticks are spaced apart by years, the format string is '%Y'
-            - If the ticks are spaced apart by months, the format string is '%b'
-            - If the ticks are spaced apart by days, the format string is '%d'
-            - If the ticks are spaced apart by hours, the format string is '%H:%M'
-            - If the ticks are spaced apart by minutes, the format string is '%H:%M'
 
         The generated strings are then returned as a list.
         """

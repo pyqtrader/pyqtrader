@@ -112,6 +112,12 @@ class apiBase:
             return self.uf(self)
 
     def create_subitem(self,itype,*args,values=(0,0),**kwargs):
+
+        ignoreBounds=False
+        if 'ignoreBounds' in kwargs:
+            ignoreBounds=kwargs['ignoreBounds']
+            del kwargs['ignoreBounds']
+
         if 'timeseries' not in kwargs or kwargs['timeseries'] is None:
             ts=self.timeseries
         else:
@@ -122,7 +128,6 @@ class apiBase:
             si=studies._CurveItem(ts,values)
         
         elif itype=='Bar':
-            kwargs['width']*=self.timeseries.tf
             si=studies._BarItem(ts,values,**kwargs)
         
         elif itype=='Text':
@@ -138,8 +143,8 @@ class apiBase:
                 simple_message_box("UserApps", text=f'{itype} - unknown type, {e}')
         
         self.subitems.append(si)
-        if hasattr(self,'dockplt'):self.dockplt.addItem(si)
-        else: self.plt.addItem(si)
+        if hasattr(self,'dockplt'):self.dockplt.addItem(si, ignoreBounds=ignoreBounds)
+        else: self.plt.addItem(si, ignoreBounds=ignoreBounds)
         
         if hasattr(self,'right_clicked'):
             si.right_clicked=self.right_clicked
@@ -406,7 +411,12 @@ def api_study_factory(base):
         @property
         def tooltipinfo(self):
             a=list(self.xttip())
-            ytext=self.values[1][a[0]]
+            if a[0]<self.values[0][0]:
+                ytext=self.values[1][0]
+            elif a[0]>self.values[0][1]:
+                ytext=self.values[1][1]
+            else:
+                ytext=self.values[1][a[0]]
             a.insert(2,ytext)
             return a
 

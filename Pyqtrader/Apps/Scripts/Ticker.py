@@ -3,7 +3,7 @@ PQitemtype='Script'
 PQshortcut='Ctrl+L'
 
 def PQinitf(PQscript):
-    PQscript.create_subitem('Label',text='!@tk, !@tf')
+    PQscript.create_subitem('Label',text='!@tk, !@tf', ignoreBounds=True)
     si=PQscript.subitems[0]
     si.set_bind('br')
     si.setState([0,0])

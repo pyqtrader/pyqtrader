@@ -30,13 +30,13 @@ class DonchianChannel(PolylineCustomItem):
     def calc_donchian(self):
         highs=self.timeseries.data[cfg.HIGHS].iloc[-LENGTH-1 if LENGTH!=None else None:-1]
         lows=self.timeseries.data[cfg.LOWS].iloc[-LENGTH-1 if LENGTH!=None else None:-1]
-        ticks=self.timeseries.ticks[-LENGTH-1 if LENGTH!=None else None:-1]
-        last_tick=self.timeseries.ticks[-1]
+        bars=self.timeseries.bars[-LENGTH-1 if LENGTH!=None else None:-1]
+        last_tick=self.timeseries.bars[-1]
         
         highs = highs.rolling(window=PERIOD).max()
             
         # Exclude nan
-        high_line = [(t, h) for t, h in zip(ticks, highs) if not np.isnan(h)]
+        high_line = [(t, h) for t, h in zip(bars, highs) if not np.isnan(h)]
         # Extrapolate last element
         high_line.append((last_tick, high_line[-1][1]))
         if self.is_new:
@@ -46,7 +46,7 @@ class DonchianChannel(PolylineCustomItem):
         
         lows = lows.rolling(window=PERIOD).min()
         # Exclude nan
-        low_line = [(t, l) for t, l in zip(ticks, lows) if not np.isnan(l)]
+        low_line = [(t, l) for t, l in zip(bars, lows) if not np.isnan(l)]
         # Extrapolate last element
         low_line.append((last_tick, low_line[-1][1]))
         if self.is_new:

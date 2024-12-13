@@ -372,14 +372,14 @@ class DrawItem(DrawProps): #ROI generic abstract class
             return
         
         df=self.timeseries.data
-        ticks=self.timeseries.ticks
+        bars=self.timeseries.bars
         
         vect=mapper(Point(cfg.MAGNET_DISTANCE,cfg.MAGNET_DISTANCE))-mp0
         vect=Point(abs(vect.x()),abs(vect.y()))
         cnt=0
         r=self.rawdtc
         for cnt in range(len(r)):
-            diff=np.abs(ticks-r.cords[cnt].x)
+            diff=np.abs(bars-r.cords[cnt].x)
             closest_index=np.argmin(diff)
             if diff[closest_index]<vect.x():
                 magbar=df.iloc[closest_index] #magnetized bar
@@ -388,7 +388,7 @@ class DrawItem(DrawProps): #ROI generic abstract class
                 closest_price=np.argmin(diff)
                                         
                 if diff[closest_price]<vect.y():
-                    r.set_cord(cnt,dtPoint(None, ticks[closest_index],prices[closest_price]))
+                    r.set_cord(cnt,dtPoint(None, bars[closest_index],prices[closest_price]))
                     self.set_dtc(r,force=True)
 
         return
@@ -871,7 +871,7 @@ class DRegressionChannelDialog(DTrendLineDialog):
     def update_item(self, **kwargs):
         _=super().update_item(**kwargs)
         
-        # Get ticks slice and unpack it into variables
+        # Get bars slice and unpack it into variables
         (x0,),(x1,)=self.item.rawdtc.get_slice(slice(1,2))
         
         #Calculate regression price values
@@ -948,7 +948,7 @@ class DrawRegressionChannel(DrawSegment):
         # get and set real position in tick coordinates
 
         if ev.isFinish() and self.repos:
-            # Get ticks slice and unpack it into variables
+            # Get bars slice and unpack it into variables
             (x0,), (x1,)=self.repos.get_slice(slice(1,2))
             line,_,_=self.calculate_regression(x0,x1)
             ld=dtCords([dtPoint(None,x0,line[0]),dtPoint(None,x1,line[-1])])
@@ -1033,8 +1033,8 @@ class DrawRegressionChannel(DrawSegment):
         - lower_channel (array): Lower boundary of the channel.
         """
 
-        x0=int(x0//self.timeseries.tf)
-        x1=int(x1//self.timeseries.tf)
+        x0=int(x0)
+        x1=int(x1)
 
         # Process exceptions
         if x1==x0:
@@ -1480,7 +1480,7 @@ class DrawRuler(DrawSegment):
         points=state['points']
         delta=points[1]-points[0]
         self.tag.setPos(pos+points[1])
-        bars=int(delta[0]//self.timeseries.timeframe)
+        bars=int(delta[0])
         pips=(delta[1])*chtl.to_pips(self.timeseries.symbol)
         self.tag.setText(f"Pips: {pips:.1f}\nBars: {str(bars)}")
     
@@ -1711,13 +1711,13 @@ class AltInfiniteLine(DrawProps,pg.InfiniteLine):
             return None
         
         df=self.timeseries.data
-        ticks=self.timeseries.ticks
+        bars=self.timeseries.bars
 
         pts=self.getPos()
         
         vect=mapper(Point(cfg.MAGNET_DISTANCE,cfg.MAGNET_DISTANCE))-mp0
         vect=Point(abs(vect.x()),abs(vect.y()))
-        diff=np.abs(ticks-pts[0])#initialize minimum x axis distance from the base point
+        diff=np.abs(bars-pts[0])#initialize minimum x axis distance from the base point
         closest_index=np.argmin(diff)
         if diff[closest_index]<vect.x():
             magbar=df.iloc[closest_index] #magnetized bar
@@ -1725,7 +1725,7 @@ class AltInfiniteLine(DrawProps,pg.InfiniteLine):
             diff=np.abs(prices-pts[1])
             closest_price=np.argmin(diff) 
             if diff[closest_price]<vect.y():
-                xy=dtPoint(None,int(ticks[closest_index]),prices[closest_price])
+                xy=dtPoint(None,int(bars[closest_index]),prices[closest_price])
                 self.set_dtc(xy,force=True)
                 return xy
         return None #if xy is not returned, return None
@@ -2261,7 +2261,7 @@ class CrossHair:
         x=round(x)
         dtxs=ts.extended_times(x)
         # Assign ind to values outside the timeseries 
-        ind = min(max(ts.ticks[0], x), ts.ticks[-1])
+        ind = min(max(ts.bars[0], x), ts.bars[-1])
 
         if tf>=cfg.PERIOD_D1:
             self.textX.setText(datetime.datetime.fromtimestamp(dtxs, tz=tz).strftime("%d %b'%y"))

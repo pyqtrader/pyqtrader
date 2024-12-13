@@ -129,7 +129,7 @@ def set_chart(plt,symbol=None,timeframe=None):
     old_lc_item=plt.lc_item
     symb=symbol if symbol is not None else old_item.symbol
     timef=timeframe if timeframe is not None else old_item.timeframe
-    tk=old_item.timeseries.ticks[-1]
+    tk=old_item.timeseries.bars[-1]
     ax0=(ax:=plt.getAxis('bottom')).range[0]
     ax1=ax.range[1]
     cnt=int(tk-ax0)

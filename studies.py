@@ -4,6 +4,7 @@ from PySide6 import QtCore
 from pyqtgraph import PlotCurveItem,BarGraphItem,TextItem,InfiniteLine
 import numpy as np
 import pandas_ta as ta
+from datetime import datetime
 
 import cfg
 import charttools as chtl, charttools
@@ -302,14 +303,14 @@ class _ChartItem: #study abstract class
         return super(_ChartItem,self).setData(*args,**kwargs)
 
     def set_data(self, tseries, yvals, shift=0):
-        ticks=tseries.ticks
+        bars=tseries.bars
         if type(yvals)==list:
             yvals = np.array(yvals)
         
         def initial():
             self.values=self.matcher(tseries,yvals,shift=shift)
             self.setData(*self.values)
-            self._length=len(ticks)
+            self._length=len(bars)
         
         if not self.caching:
             initial()
@@ -317,7 +318,7 @@ class _ChartItem: #study abstract class
             if self._length is None or tseries is None or yvals is None:
                 initial()
             else:
-                delta=len(ticks)-self._length
+                delta=len(bars)-self._length
                 ly=len(yvals)
                 if delta<0:
                     initial()
@@ -328,14 +329,14 @@ class _ChartItem: #study abstract class
                     except Exception: #to process X,Y mismatch and other exceptions
                         initial()
                 elif delta==1:
-                    self.values[0]=np.append(self.values[0],ticks[-1])
+                    self.values[0]=np.append(self.values[0],bars[-1])
                     self.values[1]=np.append(self.values[1],0) # add empty value
                     self.values[1][-ly:]=yvals
                     try:
                         self.setData(*self.values)
                     except Exception: #to process X,Y mismatch and other exceptions
                         initial()
-                    self._length=len(ticks)#update length, in other cases it is updated within initials()
+                    self._length=len(bars)#update length, in other cases it is updated within initials()
                 else: #delta>1 - re-initialise fully if more than 1 new candles have formed
                     initial()
         return self.values
@@ -345,21 +346,21 @@ class _ChartItem: #study abstract class
             res=[None,None]
         
         else:
-            tslen=len(tseries.ticks)
+            tslen=len(tseries.bars)
             vlen=len(yvals)
             diff=tslen-vlen
-            ticks=tseries.ticks[diff:]
+            bars=tseries.bars[diff:]
             tf=tseries.timeframe
             if shift>0:
                 # Shift to the right
-                ticks=ticks[shift:]
-                ticks = np.append(ticks[:-1], np.arange(ticks[-1], ticks[-1] + (shift+1)*tf, tf))
+                bars=bars[shift:]
+                bars = np.append(bars[:-1], np.arange(bars[-1], bars[-1] + (shift+1)*tf, tf))
             elif shift<0:
                 # Shift to the left
-                ticks=ticks[:shift]
-                ticks=np.append(np.arange(ticks[0]+shift*tf, ticks[0],tf),ticks)
+                bars=bars[:shift]
+                bars=np.append(np.arange(bars[0]+shift*tf, bars[0],tf),bars)
 
-            res=[ticks,yvals]
+            res=[bars,yvals]
         
         return res
 
@@ -555,11 +556,12 @@ def study_item_factory(base):
             tf=self.timeseries.timeframe
             x=self.dockplt.mapped_xy[0]
             ind=round(x)
-            dtxs=self.timeseries.extended_times(x)
+            dtxs=self.timeseries.extended_times(ind)
+            tz=self.plt.mwindow.tz
             if tf<cfg.PERIOD_D1:
-                xtext=dtxs.strftime("%Y-%b-%d %H:%M")
+                xtext=datetime.fromtimestamp(dtxs,tz=tz).strftime("%Y-%b-%d %H:%M")
             else:
-                xtext=dtxs.strftime("%Y-%b-%d")
+                xtext=datetime.fromtimestamp(dtxs,tz=tz).strftime("%Y-%b-%d")
             diff=len(self.timeseries.times)-len(self.values[0])
             index=ind-diff
             pre=chtl.precision(self.plt.symbol) if self.precision is None else self.precision
@@ -853,7 +855,7 @@ class MACDItem(StudyCurveItem):
         rct=dkvb.viewRect()
         hist=self.calc_hist()
         self.histitem=_BarItem(self.timeseries, hist, 
-            width=width_hist*self.timeseries.tf)
+            width=width_hist)
         self.histitem.setZValue(-1)
         self.dockplt.addItem(self.histitem)
         dkvb.setRange(rect=rct,padding=0) 
@@ -944,12 +946,12 @@ class MACDItem(StudyCurveItem):
             self.color_signal=state['color_signal']
             self.signalline.setPen(dict(width=self.width_signal,color=self.color_signal))
             self.width_hist=state['width_hist']
-            self.histitem.opts['width']=self.width_hist*self.timeseries.tf
+            self.histitem.opts['width']=self.width_hist
             self.histitem.setOpts()
         super().set_props(state,**kwargs)
     
     def update_hist_width(self,ts):
-        self.histitem.opts['width']=self.width_hist*ts.tf
+        self.histitem.opts['width']=self.width_hist
         self.histitem.setOpts()
 
     def replot(self):

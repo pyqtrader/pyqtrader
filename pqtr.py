@@ -897,7 +897,7 @@ class MDIWindow(QtWidgets.QMainWindow):
     def range_setter(self,plt,item,last_tick=None,xcount=cfg.DX_COUNT, 
             xshift=cfg.DX_SHIFT,yzoom=cfg.DY_ZOOM):
 
-        XLast=item.ticks[-1] if last_tick is None else last_tick
+        XLast=item.bars[-1] if last_tick is None else last_tick
         plt.setXRange(XLast-xcount,XLast+xshift,padding=0)
         xl= XLast
         ymax=item.ymax(xl-xcount,xl)
@@ -917,13 +917,13 @@ class MDIWindow(QtWidgets.QMainWindow):
                             pass #print(f"The {item} item does not have a state")
                 old_cbl_item=plt.chartitem
                 xax=plt.getAxis('bottom')
-                xc =int((min(old_cbl_item.ticks[-1],xax.range[1])-xax.range[0]))
-                xs=int((max(old_cbl_item.ticks[-1],xax.range[1])-old_cbl_item.ticks[-1]))                       
+                xc =int((min(old_cbl_item.bars[-1],xax.range[1])-xax.range[0]))
+                xs=int((max(old_cbl_item.bars[-1],xax.range[1])-old_cbl_item.bars[-1]))                       
                 
                 timepoint=None
-                if old_cbl_item.ticks[0] < xax.range[1] < old_cbl_item.ticks[-1]: 
+                if old_cbl_item.bars[0] < xax.range[1] < old_cbl_item.bars[-1]: 
                     for x in range(len(old_cbl_item.times)): 
-                        if xax.range[1]-old_cbl_item.ticks[x]<=1:
+                        if xax.range[1]-old_cbl_item.bars[x]<=1:
                             timepoint=old_cbl_item.times[x]
                             break
 
@@ -956,11 +956,11 @@ class MDIWindow(QtWidgets.QMainWindow):
                 
                 xl=None
                 if timepoint is None:
-                    xl=new_cbl_item.ticks[-1]                          
+                    xl=new_cbl_item.bars[-1]                          
                 else:
-                    for x in range(len(new_cbl_item.ticks)):
+                    for x in range(len(new_cbl_item.bars)):
                         if timepoint-new_cbl_item.times[x]<=new_tf:
-                            xl=new_cbl_item.ticks[x]
+                            xl=new_cbl_item.bars[x]
                             break
     
                 self.range_setter(plt,new_cbl_item,xl,xc,xs,yzoom=yz)
