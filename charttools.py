@@ -5,7 +5,6 @@ from datetime import datetime
 import numpy as np
 from pytz import timezone, UnknownTimeZoneError
 
-import overrides as ovrd,overrides
 import cfg
 
 from _debugger import _exinfo,_print,_printcallers,_p,_pc,_c,_pp
@@ -114,8 +113,6 @@ def pgclr_to_hex(clr):
     return res
 
 from PySide6 import QtWidgets 
-from drawings import CrossHair,PriceLine
-
 def simple_message_box(title=None,text='Notification',icon=None):
         mbox=QtWidgets.QMessageBox()
         mbox.setWindowTitle(title)
@@ -124,41 +121,21 @@ def simple_message_box(title=None,text='Notification',icon=None):
             mbox.setIcon(icon)
         mbox.exec()
 
-def set_chart(plt,symbol=None,timeframe=None):
-    old_item=plt.chartitem
-    old_lc_item=plt.lc_item
-    symb=symbol if symbol is not None else old_item.symbol
-    timef=timeframe if timeframe is not None else old_item.timeframe
-    tk=old_item.timeseries.bars[-1]
-    ax0=(ax:=plt.getAxis('bottom')).range[0]
-    ax1=ax.range[1]
-    cnt=int(tk-ax0)
-    shf=int(ax1-tk)
-    try:
+#can accept both timeframes and timeframe labels
+def symbol_to_filename(s=cfg.D_SYMBOL,tf=cfg.D_TIMEFRAME, fullpath=False):
+    if tf not in list(cfg.TIMEFRAMES.keys()):
         try:
-            plt.removeItem(old_lc_item)
+            filename=f'{s}_{cfg.tf_to_label(tf)}.csv'
         except Exception:
-            pass
-        new_item=plt.mwindow.cbl_plotter(plt,symbol=symb,ct=old_item.charttype,
-            tf=timef)
-        plt.mwindow.range_setter(plt,new_item,xcount=cnt,xshift=shf)
-        plt.removeItem(old_item)
-        del old_item
-        plt.chartitem=new_item
-        # chtl.carryover_items(plt,newitem=new_item)
-        
-        if plt.crosshair_enabled==True:
-            del plt.crosshair_item
-            plt.crosshair_item=CrossHair(plt)
-        
-        if plt.priceline_enabled==True:
-            del plt.priceline
-            plt.priceline=PriceLine(plt)
-        plt.sigTimeseriesChanged.emit(new_item.timeseries)
-        plt.vb.sigResized.emit(plt.vb) #workaround to ensure propogation of AltDateAxisItem data
-    except Exception as e:
-        simple_message_box(text=f'Invalid symbol: {repr(e)}',icon=QtWidgets.QMessageBox.Warning)
-        #print('Invalid symbol')
+            simple_message_box(text=f"Unknown timeframe: {tf}")
+            return
+    else:
+        filename=f'{s}_{tf}.csv'
+    
+    if fullpath:
+        filename=cfg.DATA_SYMBOLS_DIR+filename
+    
+    return filename
 
 def is_linux():
     return sys.platform.startswith('linux')
@@ -177,22 +154,6 @@ def string_to_html(text_color='black'):
             return output_text
         return wrapper
     return decorator
-
-#can accept both timeframes and timeframe labels
-def symbol_to_filename(s=cfg.D_SYMBOL,tf=cfg.D_TIMEFRAME, fullpath=False):
-    if tf not in list(cfg.TIMEFRAMES.keys()):
-        try:
-            filename=f'{s}_{cfg.tf_to_label(tf)}.csv'
-        except Exception:
-            simple_message_box(text=f"Unknown timeframe: {tf}")
-            return
-    else:
-        filename=f'{s}_{tf}.csv'
-    
-    if fullpath:
-        filename=cfg.DATA_SYMBOLS_DIR+filename
-    
-    return filename
 
 def filename_to_symbol(filename):
     if "_" not in filename:

@@ -107,6 +107,7 @@
      <addaction name="actionStochastic"/>
     </widget>
     <addaction name="menuIndicators"/>
+    <addaction name="actionHeikin_Ashi"/>
    </widget>
    <widget class="QMenu" name="menuTools">
     <property name="title">
@@ -906,6 +907,11 @@
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="actionHeikin_Ashi">
+   <property name="text">
+    <string>Heikin Ashi</string>
    </property>
   </action>
  </widget>

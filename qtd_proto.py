@@ -3,7 +3,7 @@
 ################################################################################
 ## Form generated from reading UI file 'qtd_proto.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.8.0
+## Created by: Qt User Interface Compiler version 6.8.1
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -263,6 +263,8 @@ class Ui_MainWindow(object):
         icon25.addFile(u"Pyqtrader/.system/assets/regression_channel.png", QSize(), QIcon.Mode.Normal, QIcon.State.Off)
         self.actionDrawRegressionChannel.setIcon(icon25)
         self.actionDrawRegressionChannel.setMenuRole(QAction.MenuRole.NoRole)
+        self.actionHeikin_Ashi = QAction(MainWindow)
+        self.actionHeikin_Ashi.setObjectName(u"actionHeikin_Ashi")
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
         self.gridLayout = QGridLayout(self.centralwidget)
@@ -361,6 +363,7 @@ class Ui_MainWindow(object):
         self.menuChart.addAction(self.actionEmpty_Profile_Bin)
         self.menuChart.addSeparator()
         self.menuInsert.addAction(self.menuIndicators.menuAction())
+        self.menuInsert.addAction(self.actionHeikin_Ashi)
         self.menuIndicators.addAction(self.actionAverage_True_Range)
         self.menuIndicators.addAction(self.actionBollinger_Bands)
         self.menuIndicators.addAction(self.actionMACD)
@@ -638,6 +641,7 @@ class Ui_MainWindow(object):
 #if QT_CONFIG(tooltip)
         self.actionDrawRegressionChannel.setToolTip(QCoreApplication.translate("MainWindow", u"Regression Channel", None))
 #endif // QT_CONFIG(tooltip)
+        self.actionHeikin_Ashi.setText(QCoreApplication.translate("MainWindow", u"Heikin Ashi", None))
         self.menuFile.setTitle(QCoreApplication.translate("MainWindow", u"File", None))
         self.menuWindow.setTitle(QCoreApplication.translate("MainWindow", u"Window", None))
         self.menuChart.setTitle(QCoreApplication.translate("MainWindow", u"Chart", None))

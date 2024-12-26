@@ -2,18 +2,10 @@ import PySide6
 from PySide6 import QtWidgets,QtGui,QtCore
 import cfg
 import charttools as chtl, charttools
-import fetcher as ftch
+from charttools import simple_message_box
 
 #debugging section
 from _debugger import _print, _printcallers,  _exinfo, _p, _pc,_c
-
-def simple_message_box(title=None,text='Notification',icon=None):
-        mbox=QtWidgets.QMessageBox()
-        mbox.setWindowTitle(title)
-        mbox.setText(text)
-        if icon!=None:
-            mbox.setIcon(icon)
-        mbox.exec()
 
 def dialog_message_box(title,text,icon=QtWidgets.QMessageBox.NoIcon,
         default_button=QtWidgets.QMessageBox.Cancel,
@@ -1313,6 +1305,13 @@ class MT5IntegrationDialog(QtWidgets.QDialog):
         self.layout.addWidget(self.mt5_executable_path_line_edit)
         self.mt5_executable_path_line_edit.setText(self.mwindow.props.get('mt5_executable_path', ''))
 
+        # String box for options
+        self.options_label = QtWidgets.QLabel('Options (--host, --port, --server etc., optional):')
+        self.layout.addWidget(self.options_label)
+        self.options_line_edit = QtWidgets.QLineEdit()
+        self.layout.addWidget(self.options_line_edit)
+        self.options_line_edit.setText(self.mwindow.props.get('mt5_server_options', ''))
+
        # Horizontal line separator
         separator = QtWidgets.QFrame()
         separator.setFrameShape(QtWidgets.QFrame.HLine)
@@ -1349,6 +1348,7 @@ class MT5IntegrationDialog(QtWidgets.QDialog):
         b=self.mwindow.props['python_exe_path'] = self.python_exe_path_line_edit.text()
         self.mwindow.props['mt5_wineprefix'] = self.mt5_wineprefix_line_edit.text()
         self.mwindow.props['mt5_executable_path'] = self.mt5_executable_path_line_edit.text()
+        self.mwindow.props['mt5_server_options'] = self.options_line_edit.text()       
         self.mwindow.props['mt5_headless_mode_enabled'] = self.headless_mode_checkbox.isChecked()
         
         if a and b=='':

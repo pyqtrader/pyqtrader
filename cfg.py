@@ -3,7 +3,7 @@ from datetime import datetime
 
 PROGRAM_NAME='pyqtrader'
 
-VERSION='1.4.0'
+VERSION='1.4.1'
 
 DYNAMIC_QUERYING=True #continuous updating from the data provider, set False to turn off (no QTimer initiation) 
 
@@ -84,7 +84,7 @@ def tf_to_label(tf):
                      
 D_TFLABEL=tf_to_label(D_TIMEFRAME)
 
-CHARTTYPES=('Bar','Candle','Line')
+CHARTTYPES=('Bar','Candle','Line','HeikinAshi')
 D_CHARTTYPE='Bar'
 
 #Timeseries names

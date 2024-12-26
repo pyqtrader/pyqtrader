@@ -15,7 +15,6 @@ import charttools as chtl,charttools
 import uitools
 from fetcher import FetcherMT5
 
-
 #debugging section
 from _debugger import _print,_printcallers,_exinfo,_ptime,_c,_p,_pc,_pp,_fts
 
@@ -1052,7 +1051,7 @@ class DrawRegressionChannel(DrawSegment):
             prices=self.timeseries.highs[x0:x1+1]+self.timeseries.lows[x0:x1+1]+self.timeseries.closes[x0:x1+1]
             prices=prices/3
         else:
-            uitools.simple_message_box("Error",text="Unknown regression line type", icon=QtGui.QMessageBox.Warning)   
+            chtl.simple_message_box("Error",text="Unknown regression line type", icon=QtGui.QMessageBox.Warning)   
         
         n = len(prices)
 
@@ -1106,7 +1105,7 @@ class DrawRegressionChannel(DrawSegment):
                 std_dev=np.std(np.concatenate((high_residuals,low_residuals)))
             
             else:
-                uitools.simple_message_box("Error",text="Unknown regression mode type", icon=QtGui.QMessageBox.Warning)   
+                chtl.simple_message_box("Error",text="Unknown regression mode type", icon=QtGui.QMessageBox.Warning)   
 
             # Calculate the upper and lower channel lines
             channel_width = self.multiplier * std_dev
@@ -1985,7 +1984,7 @@ class DrawHorLine(AltInfiniteLine):
             if not (self._endPoints[0] and self._endPoints[1]): #check whether any endpoint is 0
                 self._computeBoundingRect() #if so, reset self._endPoints
         else:
-            uitools.simple_message_box(text='Unrecognized ray direction',
+            chtl.simple_message_box(text='Unrecognized ray direction',
                 icon=QtWidgets.QMessageBox.Warning)
             #print(f'{self.raydir} Unrecognized ray direction')
         
@@ -2616,7 +2615,7 @@ class AltPlotWidget(pg.PlotWidget):
         if isinstance(fetch,FetcherMT5):
             symb=fetch.get_best_symbol_match(symb)
         
-        chtl.set_chart(self,symbol=symb)
+        set_chart(self,symbol=symb)
 
         self.subwindow.setFocus()
         
@@ -2744,3 +2743,38 @@ class NewThread(QtCore.QThread):
         # self.loop.exec()
         super().run()
 
+def set_chart(plt,symbol=None,timeframe=None):
+    old_item=plt.chartitem
+    old_lc_item=plt.lc_item
+    symb=symbol if symbol is not None else old_item.symbol
+    timef=timeframe if timeframe is not None else old_item.timeframe
+    tk=old_item.timeseries.bars[-1]
+    ax0=(ax:=plt.getAxis('bottom')).range[0]
+    ax1=ax.range[1]
+    cnt=int(tk-ax0)
+    shf=int(ax1-tk)
+    try:
+        try:
+            plt.removeItem(old_lc_item)
+        except Exception:
+            pass
+        new_item=plt.mwindow.cbl_plotter(plt,symbol=symb,ct=old_item.charttype,
+            tf=timef)
+        plt.mwindow.range_setter(plt,new_item,xcount=cnt,xshift=shf)
+        plt.removeItem(old_item)
+        del old_item
+        plt.chartitem=new_item
+        # chtl.carryover_items(plt,newitem=new_item)
+        
+        if plt.crosshair_enabled==True:
+            del plt.crosshair_item
+            plt.crosshair_item=CrossHair(plt)
+        
+        if plt.priceline_enabled==True:
+            del plt.priceline
+            plt.priceline=PriceLine(plt)
+        plt.sigTimeseriesChanged.emit(new_item.timeseries)
+        plt.vb.sigResized.emit(plt.vb) #workaround to ensure propogation of AltDateAxisItem data
+    except Exception as e:
+        chtl.simple_message_box(text=f'Invalid symbol: {repr(e)}',icon=QtWidgets.QMessageBox.Warning)
+        #print('Invalid symbol')

@@ -1,0 +1,13 @@
+numpy<=1.26.24
+pandas
+pandas_ta
+Pillow
+psutil
+pyqtgraph
+PySide6
+PySide6_Addons
+PySide6_Essentials
+pytz
+Requests
+rpyc
+

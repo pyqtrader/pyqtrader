@@ -9,7 +9,6 @@ import pandas as pd
 import dataclasses as dc
 
 import cfg
-import overrides as ovrd, overrides
 import charttools as chtl, charttools
 
 try:
@@ -197,7 +196,26 @@ class Timeseries:
             A new timeseries object containing the sliced data.
         """
         return TsSliced(self, ts_slice)   
-    
+
+    def heikin_ashi(self, start=None, end=None):
+        df=self.data.iloc[start-1 if start else start : end]
+        # Calculate Heikin Ashi candles
+        ha_df = pd.DataFrame(index=df.index)
+        ha_df['c'] = (df['o'] + df['h'] + df['l'] + df['c']) / 4
+        ha_df['o'] = (df['o'].shift(1) + df['c'].shift(1)) / 2
+        ha_df['h'] = df[['h', 'o', 'c']].max(axis=1)
+        ha_df['l'] = df[['l', 'o', 'c']].min(axis=1)
+
+        if start:
+            # Drop the first row used for 'o' calculation
+            ha_df=ha_df.iloc[1:]
+        else:
+            # Set the first open value to the first close value to start the series
+            ha_df.loc[ha_df.index[0],'o'] = ha_df.loc[ha_df.index[0],'c']
+
+        return ha_df
+
+
 class TsSliced:
     """
     A class representing a slice of Timeseries data.
@@ -292,28 +310,49 @@ class CandleBarItem(pg.GraphicsObject):
         self.picture = QtGui.QPicture()
         p = QtGui.QPainter(self.picture)
         w=1/3
-        ts= self.timeseries
-        # ensure the bars array is initialized outside of the loops
-        bars=ts.bars
+        df= self.timeseries.data.iloc[self.start:self.end]
+        
         if(charttype=='Candle'):
             p.setPen(pg.mkPen(self.chartprops[cfg.framecolor],width=0.7)) 
-            for index,row in ts.data[self.start:self.end].iterrows():                
-                t=bars[index]
+            bull_brush=pg.mkBrush(self.chartprops[cfg.bull])
+            bear_brush=pg.mkBrush(self.chartprops[cfg.bear])
+            for row in df.itertuples():                
+                t=row.Index
                 if row.h!=row.l:
                     p.drawLine(QtCore.QPointF(t, row.l), QtCore.QPointF(t, row.h))
                 if row.o > row.c:
-                    p.setBrush(pg.mkBrush(self.chartprops[cfg.bear]))
+                    p.setBrush(bear_brush)
                 else:
-                    p.setBrush(pg.mkBrush(self.chartprops[cfg.bull]))
+                    p.setBrush(bull_brush)
                 p.drawRect(QtCore.QRectF(t-w, row.o, w*2, row.c-row.o))
+
         elif(charttype=='Bar'):
             p.setPen(pg.mkPen(self.chartprops[cfg.barcolor],width=0.7))
-            for index,row in ts.data[self.start:self.end].iterrows():
-                t=ts.bars[index] 
+            for row in df.itertuples():
+                t=row.Index
                 if row.h!=row.l:
                     p.drawLine(QtCore.QPointF(t, row.l), QtCore.QPointF(t, row.h))
                 p.drawLines([QtCore.QPointF(t, row.c), QtCore.QPointF(t+w, row.c),
                     QtCore.QPointF(t, row.o), QtCore.QPointF(t-w, row.o)])
+        
+        elif(charttype=="HeikinAshi"):
+            ha_df=self.timeseries.heikin_ashi(self.start, self.end)
+            bull_pen=pg.mkPen(self.chartprops[cfg.bull], width=2)
+            bear_pen=pg.mkPen(self.chartprops[cfg.bear], width=2)
+            bull_brush=pg.mkBrush(self.chartprops[cfg.bull])
+            bear_brush=pg.mkBrush(self.chartprops[cfg.bear])
+            for row in ha_df.itertuples():                
+                t=row.Index
+                if row.o > row.c:
+                    p.setPen(bear_pen)
+                    p.setBrush(bear_brush)
+                else:
+                    p.setPen(bull_pen)
+                    p.setBrush(bull_brush)
+                if row.h!=row.l:
+                    p.drawLine(QtCore.QPointF(t, row.l), QtCore.QPointF(t, row.h))
+                p.drawRect(QtCore.QRectF(t-w, row.o, w*2, row.c-row.o))
+
         p.end()
     
     def paint(self, p, *args):
@@ -324,7 +363,7 @@ class CandleBarItem(pg.GraphicsObject):
         ## or else we will get artifacts and possibly crashing.
         ## (in this case, QPicture does all the work of computing the bouning rect for us)
         return QtCore.QRectF(self.picture.boundingRect())
-
+    
 class ChartLineItem(PlotCurveItem):
     def __init__(self,timeseries,start=None,end=None,chartprops=cfg.D_CHARTPROPS):
         if start!=None:

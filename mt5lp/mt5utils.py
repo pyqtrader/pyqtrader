@@ -4,13 +4,9 @@ from pytz import timezone, UnknownTimeZoneError
 
 import numpy as np
 import pandas as pd
+from charttools import simple_message_box
 
 import cfg
-
-try:
-	from charttools import simple_message_box
-except ImportError:
-	from uitools import simple_message_box
 
 from _debugger import _p, _printcallers
 
@@ -229,14 +225,17 @@ class MT5TimeshiftWrapper:
 		return aggregated
 
 
-def start_server(python_exe_path):
+def start_server(python_exe_path, options=None):
 		
+	options=options if options else ''
+
 	try:
 		dirpath=os.path.dirname(__file__)
-		subprocess.run(f"python3 {dirpath}/mt5lp/__main__.py '{python_exe_path}' &", shell=True)
+		subprocess.run(f"python3 {dirpath}/mt5lp/__main__.py {options} '{python_exe_path}' &", shell=True)
 	except Exception as e:
 		print(f"Error running server: {repr(e)}")
 		simple_message_box(f"Error running server: {repr(e)}")
+
 
 def check_server_running(string=None):
 	string=string if string else 'mt5lp/server'
@@ -299,10 +298,10 @@ def mt5_object():
 
 	return mt5
 
-def mt5_server(python_exe_path):
+def mt5_server(python_exe_path, options=None):
 	attempt=0
 	while not check_server_running() and attempt<5:
-		start_server(python_exe_path)
+		start_server(python_exe_path, options=options)
 		time.sleep(3)
 		attempt+=1
 	

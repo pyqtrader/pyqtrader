@@ -5,11 +5,17 @@ try:
 except ImportError:
     import mt5lp.mt5utils as mt5utils
 
+from charttools import simple_message_box
+
 from _debugger import _p
 
 # Set the Wine command
 class WineProcess:
-    def __init__(self, exe_path=None, headless_mode=False, winepfx=None, python_exe_path=None): 
+    def __init__(self, exe_path=None, 
+                 headless_mode=False, 
+                 winepfx=None, 
+                 mt5_server_options=None,
+                 python_exe_path=None): 
 
         # Set the proper wineprefix in the runtime environment        
         if winepfx:
@@ -40,9 +46,9 @@ class WineProcess:
 
             self.wine_proc = subprocess.Popen(wine_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
-        self.mt5=mt5utils.mt5_server(python_exe_path)
+        self.mt5=mt5utils.mt5_server(python_exe_path, options=mt5_server_options)
         if not self.mt5.initialize():
-            mt5utils.simple_message_box(text=f"mt5.initialize() failed, error code = {self.mt5.last_error()}")
+            simple_message_box(text=f"mt5.initialize() failed, error code = {self.mt5.last_error()}")
 
 
     def shutdown(self):

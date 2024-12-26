@@ -226,6 +226,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionBarChart.triggered.connect(lambda *args: self.window_act("Bar"))
         self.ui.actionCandleChart.triggered.connect(lambda *args: self.window_act("Candle"))
         self.ui.actionLineChart.triggered.connect(lambda *args: self.window_act("Line"))
+        self.ui.actionHeikin_Ashi.triggered.connect(lambda *args: self.window_act("HeikinAshi"))
     #Timeframes
         self.ui.actionMN.triggered.connect(lambda *args: self.window_act("MN1"))
         self.ui.actionW1.triggered.connect(lambda *args: self.window_act("W1"))
@@ -283,7 +284,7 @@ class MDIWindow(QtWidgets.QMainWindow):
             except Exception as e:
                 txt="Window state restore error:\n"
                 print(txt, repr(e))
-                uitools.simple_message_box(text=txt + repr(e),icon=QtWidgets.QMessageBox.Warning)
+                chtl.simple_message_box(text=txt + repr(e),icon=QtWidgets.QMessageBox.Warning)
 
         # Initiate fetcher
         self.fetch=self.fetcher_init()
@@ -307,7 +308,7 @@ class MDIWindow(QtWidgets.QMainWindow):
             except Exception as e:
                 txt="Profile state restore error:\n"
                 print(txt,repr(e))
-                uitools.simple_message_box(text=txt + repr(e), icon=QtWidgets.QMessageBox.Warning)
+                chtl.simple_message_box(text=txt + repr(e), icon=QtWidgets.QMessageBox.Warning)
             #--------------------
        
         for key,val in self.props.items():# item self.props need to be processed after subwindows 
@@ -396,9 +397,11 @@ class MDIWindow(QtWidgets.QMainWindow):
         mt5_headless=self.props.get('mt5_headless_mode_enabled',None)
         exe=self.props.get('mt5_executable_path',None)
         python_exe=self.props.get('python_exe_path',None)
+        mt5_server_options=self.props.get('mt5_server_options', None)
         if mt5_integration:
             fetch=ftch.FetcherMT5(exe_path=exe, headless_mode=mt5_headless, 
-                    winepfx=winepfx, python_exe_path=python_exe)
+                    winepfx=winepfx, python_exe_path=python_exe,
+                    mt5_server_options=mt5_server_options)
         else:
             fetch=ftch.Fetcher()
         
@@ -526,7 +529,7 @@ class MDIWindow(QtWidgets.QMainWindow):
 
         for pr in self.profiles:
             if pr==name:
-                uitools.simple_message_box(mestitle,f"Profile '{name}' already exists",QtWidgets.QMessageBox.Warning)
+                chtl.simple_message_box(mestitle,f"Profile '{name}' already exists",QtWidgets.QMessageBox.Warning)
                 return
         
         self.profiles_reorder()
@@ -537,7 +540,7 @@ class MDIWindow(QtWidgets.QMainWindow):
                 subw.profiles.append(name)
         self.profile_eline.clear()
         self.save_subw_states()
-        uitools.simple_message_box(mestitle,f"Profile '{name}' has been added",QtWidgets.QMessageBox.Information)
+        chtl.simple_message_box(mestitle,f"Profile '{name}' has been added",QtWidgets.QMessageBox.Information)
 
     def chart_to_profile_func(self,name):
         self.ui.menuChart.close()
@@ -545,14 +548,14 @@ class MDIWindow(QtWidgets.QMainWindow):
 
         subw=self.mdi.activeSubWindow()
         if subw is None:
-            uitools.simple_message_box(mestitle,f"No chart has been selected",QtWidgets.QMessageBox.Warning)
+            chtl.simple_message_box(mestitle,f"No chart has been selected",QtWidgets.QMessageBox.Warning)
             return
         
         subwtitle=subw.windowTitle()
 
         for pr in subw.profiles:
             if pr==name:
-                uitools.simple_message_box(mestitle,f"Chart '{subwtitle}' is already in profile '{name}'",QtWidgets.QMessageBox.Warning)
+                chtl.simple_message_box(mestitle,f"Chart '{subwtitle}' is already in profile '{name}'",QtWidgets.QMessageBox.Warning)
                 return
         
         subw.profiles.append(name)
@@ -560,7 +563,7 @@ class MDIWindow(QtWidgets.QMainWindow):
             subw.profiles.remove(cfg.DELETED_PROFILE)
             subw.close()
         self.save_subw_states(subwindow=subw)
-        uitools.simple_message_box(mestitle,f"Chart '{subwtitle}' has been added to profile '{name}'",QtWidgets.QMessageBox.Information)
+        chtl.simple_message_box(mestitle,f"Chart '{subwtitle}' has been added to profile '{name}'",QtWidgets.QMessageBox.Information)
     
     def rm_profile_func(self,name):
         self.ui.menuChart.close()
@@ -614,7 +617,7 @@ class MDIWindow(QtWidgets.QMainWindow):
     def empty_profile_bin(self):
         self.ui.menuChart.close()
         title='Empty profile bin'
-        idle_message=lambda *args: uitools.simple_message_box(title=title,text=f'Nothing to do, profile {cfg.DELETED_PROFILE} is already empty',
+        idle_message=lambda *args: chtl.simple_message_box(title=title,text=f'Nothing to do, profile {cfg.DELETED_PROFILE} is already empty',
                     icon=QtWidgets.QMessageBox.Information)
         toperform=False
         for record in self.pstate:
@@ -643,7 +646,7 @@ class MDIWindow(QtWidgets.QMainWindow):
                                 objs.append(record)
                 for ob in objs:
                     self.pstate.remove(ob)
-            uitools.simple_message_box(title=title,text=f'Profile {cfg.DELETED_PROFILE} has been cleared',icon=QtWidgets.QMessageBox.Information)
+            chtl.simple_message_box(title=title,text=f'Profile {cfg.DELETED_PROFILE} has been cleared',icon=QtWidgets.QMessageBox.Information)
 
     def closeEvent(self, event):
         self.sigMainWindowClosing.emit()
@@ -943,7 +946,7 @@ class MDIWindow(QtWidgets.QMainWindow):
                         new_tf=cfg.TIMEFRAMES[act]
                         new_sy=old_cbl_item.symbol
                 except Exception:
-                    uitools.simple_message_box(text='Unknown action',info=QtWidgets.QMessageBox.Warning)
+                    chtl.simple_message_box(text='Unknown action',info=QtWidgets.QMessageBox.Warning)
                     ##print('Unknown action')
 
                 plt.removeItem(old_cbl_item)
@@ -1030,7 +1033,7 @@ class MDIWindow(QtWidgets.QMainWindow):
             
             if item is None:
                 txt="No timeseries data available.\nYou need to login or load data manually."
-                uitools.simple_message_box(text=txt)
+                chtl.simple_message_box(text=txt)
                 return
             
             self.range_setter(plt,item)
@@ -1094,7 +1097,7 @@ class MDIWindow(QtWidgets.QMainWindow):
             proceed=True
             for subw in self.mdi.subWindowList():
                 if isinstance(subw,EntryLine):
-                    uitools.simple_message_box(text='Only one entry window can be active at a time',icon=QtWidgets.QMessageBox.Warning)
+                    chtl.simple_message_box(text='Only one entry window can be active at a time',icon=QtWidgets.QMessageBox.Warning)
                     ##print('Only one entry window can be active at a time')
                     proceed=False
                     break
@@ -1134,10 +1137,10 @@ class MDIWindow(QtWidgets.QMainWindow):
                                     try:
                                         cbl_replacer(self,asw.plt,prop.upper())
                                     except Exception as e:
-                                        uitools.simple_message_box(text='Invalid timeframe',icon=QtWidgets.QMessageBox.Warning)
+                                        chtl.simple_message_box(text='Invalid timeframe',icon=QtWidgets.QMessageBox.Warning)
                                         #print('Invalid timeframe')
                                 else:
-                                    uitools.simple_message_box(text='Invalid timeframe',icon=QtWidgets.QMessageBox.Warning)
+                                    chtl.simple_message_box(text='Invalid timeframe',icon=QtWidgets.QMessageBox.Warning)
                                     #print('Invalid timeframe')
                             self.asw.setFocus()
                             self.elw.eline.returnPressed.disconnect(prop_change)
@@ -1149,7 +1152,7 @@ class MDIWindow(QtWidgets.QMainWindow):
                             del self.asw
                         self.elw.eline.returnPressed.connect(prop_change)
                 except Exception:
-                    uitools.simple_message_box(text='Select chart window first',icon=QtWidgets.QMessageBox.Warning)
+                    chtl.simple_message_box(text='Select chart window first',icon=QtWidgets.QMessageBox.Warning)
                     #print('Select chart window first')
 
         #############rerfesh block
@@ -1224,11 +1227,11 @@ class MDIWindow(QtWidgets.QMainWindow):
             txt=f'Copyright \u00A9 pyqtrader 2022-{datetime.datetime.now().year}\n'
             txt=txt+f'System: {stm}\n'
             txt=txt+f'Version: {cfg.VERSION}'
-            uitools.simple_message_box(title='About', text=txt)
+            chtl.simple_message_box(title='About', text=txt)
         
         if action=="License":
             txt=open(f'{cfg.MAIN_DIR}LICENSE').read()
-            uitools.simple_message_box(title='License',text=txt)
+            chtl.simple_message_box(title='License',text=txt)
     
     def win_close_sig_func(self):
         maxzd=self.elw.isMaximized()

@@ -8,9 +8,10 @@ import subprocess
 from pyqtgraph import Point,TextItem
 
 import charttools as chtl
+import drawings
 import cfg,studies,labelings 
 from timeseries import dtPoint, dtCords
-from uitools import simple_message_box
+from charttools import simple_message_box
 
 from _debugger import _print,_p,_printcallers,_c,_pc
 
@@ -169,7 +170,7 @@ class apiBase:
             return self.dockplt.getViewBox()
     
     def set_chart(self,**kwargs):
-        return chtl.set_chart(self.plt,**kwargs)
+        return drawings.set_chart(self.plt,**kwargs)
 
     def removal(self):
         self.deinitf()

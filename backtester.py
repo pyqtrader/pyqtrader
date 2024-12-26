@@ -9,7 +9,7 @@ from datetime import datetime
 import typing
 
 from timeseries import dtPoint
-from charttools import precision, to_pips, to_points, simple_message_box
+from charttools import to_pips, to_points, simple_message_box
 import cfg
 
 from _debugger import *

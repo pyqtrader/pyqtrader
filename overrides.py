@@ -62,12 +62,6 @@ def paint_ellipse_override(self, p, opt, widget): #override
 pg.EllipseROI.paint=paint_ellipse_override
 ###################
 
-#HOVER DISCARD REVERTED IN POLYLINEROI TO ENSURE DRAGS BY DRAGGING THE SEGMENTS THEMSELVES RATHER THAN THE BODY OF THE ROI
-from pyqtgraph import LineSegmentROI
-pg.graphicsItems.ROI._PolyLineSegment.hoverEvent=LineSegmentROI.hoverEvent
-#Poly roi handle supression:
-pg.graphicsItems.ROI._PolyLineSegment.mouseDragEvent=lambda *args,**kwargs: None
-###################
 
 #Get rid of Handle menu
 from pyqtgraph.graphicsItems.ROI import Handle

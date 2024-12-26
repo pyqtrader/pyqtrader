@@ -9,6 +9,7 @@ from difflib import SequenceMatcher
 
 import cfg
 import charttools as chtl, charttools
+from charttools import simple_message_box
 from mt5lp import mt5utils, mt5runner
 
 from _debugger import _p,_pc,_printcallers,_exinfo,_ptime,_print
@@ -48,8 +49,8 @@ def tf_to_grn(tf):
 
 class Fetcher(QtCore.QObject):
     sigConnectionStatusChanged=QtCore.Signal(object)
-    def __init__(self, *args,**kwargs):
-        super().__init__(*args,**kwargs)
+    def __init__(self):
+        super().__init__()
         self.connected=False
         self.offline_mode=False
         self.acct=self._acct()
@@ -73,7 +74,6 @@ class Fetcher(QtCore.QObject):
         try:
             a=SourceFileLoader(cfg.ACCT_FILE,cfg.DATA_DIR+cfg.ACCT_FILE).load_module()
         except Exception:
-            from uitools import simple_message_box
             simple_message_box(text='Login data error: (re)enter login data if using API')
             create_acct_file()
             a=SourceFileLoader(cfg.ACCT_FILE,cfg.DATA_DIR+cfg.ACCT_FILE).load_module()
@@ -208,20 +208,22 @@ class Fetcher(QtCore.QObject):
 
 class FetcherMT5(QtCore.QObject):
     sigConnectionStatusChanged=QtCore.Signal(object)
-    def __init__(self, *args, exe_path=None, headless_mode=False, 
-                winepfx=None, python_exe_path=None, **kwargs):
-        super().__init__(*args,**kwargs)
+    def __init__(self, exe_path=None, headless_mode=False, 
+                winepfx=None, python_exe_path=None, 
+                mt5_server_options=None):
+        super().__init__()
         
         # Ensure that python.exe is specified
         if not python_exe_path:
-            mt5utils.simple_message_box(title="Error", text="Path to python.exe must be specified in order to run mt5 integration")
+            simple_message_box(title="Error", text="Path to python.exe must be specified in order to run mt5 integration")
         
         elif not os.path.isfile(python_exe_path):
-                mt5utils.simple_message_box(title="Error",text=f"python.exe at specified path:\n '{python_exe_path}'\ndoes not exist.\n"
+                simple_message_box(title="Error",text=f"python.exe at specified path:\n '{python_exe_path}'\ndoes not exist.\n"
                     "Path to python.exe must be correctly specified in order to run mt5 integration.")
         else:
             self.wp=mt5runner.WineProcess(exe_path=exe_path, headless_mode=headless_mode,
-                                    winepfx=winepfx, python_exe_path=python_exe_path)
+                                    winepfx=winepfx, python_exe_path=python_exe_path,
+                                    mt5_server_options=mt5_server_options)
 
         self.connected=False
         self.offline_mode=False
@@ -260,7 +262,7 @@ class FetcherMT5(QtCore.QObject):
                 ts_id=f"{symbol},{cfg.tf_to_label(timeframe)}"
                 text=f"Failed to load mt5 timeseries: {error_message}. "
                 print(ts_id+": "+text)
-                chtl.simple_message_box(f"{ts_id}: Timeseries loading failure", text=f"{text}" 
+                simple_message_box(f"{ts_id}: Timeseries loading failure", text=f"{text}" 
                                         f"Consider switching to offline mode until the issue is resolved.")
             return None
         
@@ -306,7 +308,7 @@ class FetcherMT5(QtCore.QObject):
         if len(symbol) <= 3:
             text="Symbol name must be at least 4 characters long."
             print(text)
-            chtl.simple_message_box(text=text)
+            simple_message_box(text=text)
             return None
 
         symbols = self.wp.mt5.symbols_get()
