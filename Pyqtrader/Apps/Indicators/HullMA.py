@@ -8,7 +8,7 @@ from Pyqtrader.Apps.customiz import MultiLineCustomItem, PenProps, points_to_seg
 
 from _debugger import _p
 
-LENGTH=20
+LENGTH=5
 
 class HullMA(MultiLineCustomItem):
     def __init__(self, plt : drawings.AltPlotWidget, **kwargs):

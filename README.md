@@ -1,6 +1,14 @@
 # pyqtrader
 
-Clone or download this repository to the desired directory.  Start pyqtrader from that directory:
+Clone or download this repository to the desired directory.  
+
+Install `requirements.txt`:
+
+```
+pip install -r requirements.txt
+```
+
+Start pyqtrader from the installation directory:
 
 ```
 python ./pyqtrader.py

@@ -1,6 +1,7 @@
 import PySide6
 from PySide6 import QtWidgets,QtCore,QtGui
 import pyqtgraph as pg
+import pandas as pd
 from pyqtgraph.dockarea import *
 import json, requests, os, datetime
 from zoneinfo import ZoneInfo
@@ -227,6 +228,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionCandleChart.triggered.connect(lambda *args: self.window_act("Candle"))
         self.ui.actionLineChart.triggered.connect(lambda *args: self.window_act("Line"))
         self.ui.actionHeikin_Ashi.triggered.connect(lambda *args: self.window_act("HeikinAshi"))
+        self.ui.actionRenko.triggered.connect(lambda *args: uitools.RenkoDialog.__call__(self))
     #Timeframes
         self.ui.actionMN.triggered.connect(lambda *args: self.window_act("MN1"))
         self.ui.actionW1.triggered.connect(lambda *args: self.window_act("W1"))
@@ -408,7 +410,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         fetch.sigConnectionStatusChanged.connect(self.connection_status)
         if hasattr(fetch,'reload_acct'):
             self.sigAcctDataChanged.connect(fetch.reload_acct)
-        if hasattr(fetch,'wp'):
+        if hasattr(fetch,'wp') and not self.props.get('mt5_dont_kill_exe', False):
             self.sigMainWindowClosing.connect(fetch.wp.shutdown)
 
         return fetch
@@ -863,7 +865,9 @@ class MDIWindow(QtWidgets.QMainWindow):
                 subw.move(*ps['subwindow position'])
             
     #Plotter
-    def cbl_plotter(self,plt,symbol=cfg.D_SYMBOL, ct=cfg.D_CHARTTYPE, tf=cfg.D_TIMEFRAME):
+    def cbl_plotter(self,plt : drws.AltPlotWidget,
+                    symbol=cfg.D_SYMBOL, 
+                    ct=cfg.D_CHARTTYPE, tf=cfg.D_TIMEFRAME):
         tseries=tmss.Timeseries(session=self.session, fetch=self.fetch, symbol=symbol,
             timeframe=tf,count=self.props['count']) 
         
@@ -876,18 +880,25 @@ class MDIWindow(QtWidgets.QMainWindow):
         
         lc_item=None
         if tseries.lc_complete==True:
-            item=tmss.plot_timeseries(symbol,ct,ts=tseries,session=self.session,
+            item = tmss.plot_timeseries(symbol,ct,ts=tseries,session=self.session,
                 fetch=self.fetch,chartprops=plt.chartprops)                
         else:
-            item=tmss.plot_timeseries(symbol,ct,ts=tseries,session=self.session,
+            # Save the raw last candle for Renko purposes before possible Renko ts transformation
+            lc = pd.DataFrame([tseries.data.iloc[-1]])
+            
+            item = tmss.plot_timeseries(symbol,ct,ts=tseries,session=self.session,
                 fetch=self.fetch,end=-1,chartprops=plt.chartprops)
-            lc_item=tmss.plot_timeseries(symbol,ct,ts=tseries,session=self.session,
-                fetch=self.fetch,start=-1,chartprops=plt.chartprops)
+            
+            if ct != "Renko": # Exclude incomplete candle from Renko
+                lc_item=tmss.plot_timeseries(symbol,ct,ts=tseries,session=self.session,
+                    fetch=self.fetch,start=-1,chartprops=plt.chartprops)
+            else: # add raw last candle for PriceLine dynamic indication on Renko chart
+                tseries.data=pd.concat([tseries.data, lc])
+                tseries.data.reset_index(drop=True,inplace=True)
+
         plt.link_chartitem(item,lc_item)
 
-        xax=tmss.AltAxisItem(tseries, "bottom", 
-                            chartprops=plt.chartprops,
-                            tz=self.tz)
+        xax=tmss.AltAxisItem(tseries, "bottom", chartprops=plt.chartprops,tz=self.tz)
         plt.setAxisItems({"bottom":xax})   
         
         plt.subwindow.setWindowTitle(item.symbol+","+item.tf_label+plt.description)
@@ -895,10 +906,15 @@ class MDIWindow(QtWidgets.QMainWindow):
         if lc_item!=None:
             plt.addItem(lc_item)
         
+        # Ensure that cbl item range propogates to xax.range
+        plt.vb.sigResized.emit(plt.vb) #plt.vb.autoRange()
+
         return item
 
-    def range_setter(self,plt,item,last_tick=None,xcount=cfg.DX_COUNT, 
-            xshift=cfg.DX_SHIFT,yzoom=cfg.DY_ZOOM):
+    def range_setter(self,plt : drws.AltPlotWidget,
+                     item : tmss.CandleBarItem | tmss.ChartLineItem,
+                     last_tick=None,xcount=cfg.DX_COUNT, 
+                     xshift=cfg.DX_SHIFT,yzoom=cfg.DY_ZOOM):
 
         XLast=item.bars[-1] if last_tick is None else last_tick
         plt.setXRange(XLast-xcount,XLast+xshift,padding=0)
@@ -922,7 +938,6 @@ class MDIWindow(QtWidgets.QMainWindow):
                 xax=plt.getAxis('bottom')
                 xc =int((min(old_cbl_item.bars[-1],xax.range[1])-xax.range[0]))
                 xs=int((max(old_cbl_item.bars[-1],xax.range[1])-old_cbl_item.bars[-1]))                       
-                
                 timepoint=None
                 if old_cbl_item.bars[0] < xax.range[1] < old_cbl_item.bars[-1]: 
                     for x in range(len(old_cbl_item.times)): 
@@ -1268,20 +1283,18 @@ def mainexec():
     # Clean up residual processes from previous sessions, if any
     # Unfinished residual processes may lead to Segmentation fault
     # and state data corruption
-    if charttools.is_linux():
-        kill_processes("mt5lp","python.exe")
+    # if charttools.is_linux():
+    #     kill_processes("mt5lp","python.exe")
 
     cwd=os.getcwd()
     sys.path.append(cwd)
 
     for dir in cfg.DIRECTORIES:
         os.makedirs(dir,exist_ok=True)
-    app = pg.mkQApp() #QApplication(sys.argv)
+    app = pg.mkQApp() 
     app.setStyle("Fusion")
     app.setWindowIcon(QtGui.QIcon(f'{cfg.CORE_ICON}'))
     
-    # ft=ftch.FetcherMT5(window_name=mt5runner.WNAME,exe_path=mt5runner.EXE_PATH)
-    # ft=ftch.Fetcher()
     mdi = MDIWindow(application=app)
     mdi.show()
     app.exec()

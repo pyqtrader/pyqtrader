@@ -3,7 +3,7 @@ from datetime import datetime
 
 PROGRAM_NAME='pyqtrader'
 
-VERSION='1.4.1'
+VERSION='1.4.2'
 
 DYNAMIC_QUERYING=True #continuous updating from the data provider, set False to turn off (no QTimer initiation) 
 
@@ -75,7 +75,6 @@ DX_SHIFT = 20 # default x-axis candle shift
 DY_ZOOM = 0.8 # default y-axiz zoom
 D_TIMEFRAME = PERIOD_H1 # default timeframe
 D_SYMBOL='EURUSD' #default datasource symbol
-ADJUSTED_TIMEFRAMES=(PERIOD_D1,PERIOD_W1,PERIOD_MN1) #timeframes adjusted to remove time gaps (weekend etc).
 
 def tf_to_label(tf):
     for key in TIMEFRAMES:
@@ -84,7 +83,7 @@ def tf_to_label(tf):
                      
 D_TFLABEL=tf_to_label(D_TIMEFRAME)
 
-CHARTTYPES=('Bar','Candle','Line','HeikinAshi')
+CHARTTYPES=('Bar','Candle','Line','HeikinAshi', 'Renko')
 D_CHARTTYPE='Bar'
 
 #Timeseries names
@@ -336,6 +335,17 @@ LISTED_TIMEZONES = [
     ('Australia/Sydney', 'UTC+10:00'),
     ('Pacific/Auckland', 'UTC+12:00'),
 ]
+
+# Renko
+RENKO_FLAT="Flat"
+RENKO_PERCENT="Percentage"
+RENKO_MODES=(RENKO_FLAT, RENKO_PERCENT)
+RENKO_DMODE=RENKO_FLAT
+RENKO_DFLAT_BASE=1.0
+RENKO_DFLAT_BRICK=0.001
+RENKO_DPERCENT_BASE=1.0
+RENKO_DPERCENT_BRICK=1.0
+
 
 
 #Currently not in use, styles.py used instead:

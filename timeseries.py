@@ -25,10 +25,12 @@ class Timeseries:
         self.fetch=fetch
         self.symbol=symbol
         self.timeframe=self.tf=timeframe
-                                                                        
+
+        self.is_renko=False
+
         self.count=count
         self.lc_complete=True
-        
+
         self.tf_label=cfg.tf_to_label(self.tf)
         
         # Generate absolute path to be able to use the class externally
@@ -99,7 +101,10 @@ class Timeseries:
         
         if candles['complete'] is not None:
             self.lc_complete = candles['complete']
-        self.data=pd.concat([self.data,candles['data']])
+
+        df=candles['data']
+
+        self.data=pd.concat([self.data,df])
         self.data.drop_duplicates(keep='last',subset=['t'],inplace=True)
         self.data.reset_index(drop=True,inplace=True)
 
@@ -108,15 +113,15 @@ class Timeseries:
    
     def ymax(self,x0,x1): 
         try:
-            y=max(self.highs[max(x0,0): min(x1,len(self.highs)-1)])
-        except Exception:
+            y=max(self.highs[round(max(x0,0)): round(min(x1,len(self.highs)-1))])
+        except Exception as e:
             y=0
         return y
     
     def ymin(self,x0,x1): 
         try:
-            y=min(self.lows[max(x0,0): min(x1,len(self.highs)-1)])
-        except Exception:
+            y=min(self.lows[round(max(x0,0)): round(min(x1,len(self.highs)-1))])
+        except Exception as e:
             y=0
         return y    
     
@@ -197,23 +202,186 @@ class Timeseries:
         """
         return TsSliced(self, ts_slice)   
 
+
     def heikin_ashi(self, start=None, end=None):
-        df=self.data.iloc[start-1 if start else start : end]
+        df = self.data.iloc[start-1 if start else start : end]
         # Calculate Heikin Ashi candles
         ha_df = pd.DataFrame(index=df.index)
-        ha_df['c'] = (df['o'] + df['h'] + df['l'] + df['c']) / 4
-        ha_df['o'] = (df['o'].shift(1) + df['c'].shift(1)) / 2
-        ha_df['h'] = df[['h', 'o', 'c']].max(axis=1)
-        ha_df['l'] = df[['l', 'o', 'c']].min(axis=1)
+        ha_df[cfg.CLOSES] = (df[cfg.OPENS] + df[cfg.HIGHS] + df[cfg.LOWS] + df[cfg.CLOSES]) / 4
+        ha_df[cfg.OPENS] = (df[cfg.OPENS].shift(1) + df[cfg.CLOSES].shift(1)) / 2
+        ha_df[cfg.HIGHS] = df[[cfg.HIGHS, cfg.OPENS, cfg.CLOSES]].max(axis=1)
+        ha_df[cfg.LOWS] = df[[cfg.LOWS, cfg.OPENS, cfg.CLOSES]].min(axis=1)
 
         if start:
             # Drop the first row used for 'o' calculation
-            ha_df=ha_df.iloc[1:]
+            ha_df = ha_df.iloc[1:]
         else:
             # Set the first open value to the first close value to start the series
-            ha_df.loc[ha_df.index[0],'o'] = ha_df.loc[ha_df.index[0],'c']
+            ha_df.loc[ha_df.index[0], cfg.OPENS] = ha_df.loc[ha_df.index[0], cfg.CLOSES]
 
         return ha_df
+
+    @staticmethod
+    def create_renko(df, chartprops : dict, **kwargs):
+        mode = chartprops.get('renko_mode', cfg.RENKO_DMODE)
+
+        if mode == cfg.RENKO_FLAT:
+            base = kwargs.pop('base', chartprops.get('renko_flat_base', cfg.RENKO_DFLAT_BASE))
+            brick_size = kwargs.pop('brick_size', chartprops.get('renko_flat_brick', cfg.RENKO_DFLAT_BRICK))
+            return renko_flat(df, base=base, brick_size=brick_size,**kwargs)
+        else:
+            base = kwargs.pop('base' ,chartprops.get('renko_percent_base', cfg.RENKO_DPERCENT_BASE))
+            brick_size = kwargs.pop('brick_size', chartprops.get('renko_percent_brick', cfg.RENKO_DPERCENT_BRICK))
+            return renko_percent(df, base=base, brick_size=brick_size,**kwargs)
+
+
+def renko_percent(df : pd.DataFrame,
+            brick_size : float = cfg.RENKO_DPERCENT_BRICK, 
+            base : float = cfg.RENKO_DPERCENT_BASE , # Base price from which the grid is built
+            link_to_base : bool = False, # starting price, taken from the ts if False
+            precision : int = 5 ) -> pd.DataFrame:
+    
+    def horizontal_grid(base_value, step):
+        current = base_value
+        while True:
+            if step >= 0:
+                yield round(current, precision)
+                current = current * (1 + step / 100)
+            else:
+                yield round(current, precision)
+                current = current / (1 + abs(step) / 100)
+    
+    def find_brick_close(price, base, brick_size):
+        if price >= base:
+            gen_up=horizontal_grid(base,brick_size)
+            prev=next(gen_up)
+            current=next(gen_up)
+
+            while current < price:
+                prev=current
+                current=next(gen_up)
+
+            return round(prev, precision)
+        
+        else:
+            gen_down=horizontal_grid(base,-brick_size)
+            prev=next(gen_down)
+            current=next(gen_down)
+
+            while current > price:
+                prev=current
+                current=next(gen_down)
+
+            return round(prev, precision)
+
+    renko_data = []
+    renko_columns = [cfg.TIMES, cfg.OPENS, cfg.HIGHS, cfg.LOWS, cfg.CLOSES]
+    _open0 = base if link_to_base else df['o'].iloc[0]
+
+    # Identify initial brick
+    last_brick_close=find_brick_close(_open0, base, brick_size)
+
+    for row in df.itertuples():
+        current_close = row.c
+        current_timestamp = row.t
+
+        new_brick_close = find_brick_close(current_close, last_brick_close, brick_size)
+            
+        price_diff = new_brick_close - last_brick_close
+
+        # No new brick
+        if price_diff==0:
+            continue
+
+        s=1 if price_diff>0 else -1
+
+        # Draw new brick(s)
+        gen=horizontal_grid(last_brick_close, s*brick_size)
+        next_brick_close = next(gen)
+
+        # Break the bar into intermediary bricks, if any
+        while next_brick_close != new_brick_close:
+            next_brick_close = next(gen)
+            last = round(last_brick_close, precision)
+            nx = round(next_brick_close, precision)
+            
+            # Append the new brick to the Renko data
+            renko_data.append([
+                current_timestamp,
+                last,
+                nx if price_diff >= 0 else last,
+                nx if price_diff < 0 else last,
+                nx                    
+            ])
+            last_brick_close = next_brick_close
+
+    # Create the Renko dataframe
+    renko_df = pd.DataFrame(renko_data, columns=renko_columns)
+    return renko_df              
+
+def renko_flat(df : pd.DataFrame, 
+            brick_size : float = cfg.RENKO_DFLAT_BRICK, 
+            base : float = cfg.RENKO_DPERCENT_BASE,
+            link_to_base : bool = False, 
+            precision : int = 5) -> pd.DataFrame:
+    """
+    Create a Renko chart dataframe from a given OHLC dataframe.
+
+    Parameters:
+    df (pd.DataFrame): The input dataframe with columns 't' (timestamp), 'o', 'h', 'l', 'c'.
+    brick_size (float): The size of each Renko brick.
+    base (float): The base applied to the brick boundary grid.
+
+    Returns:
+    pd.DataFrame: A dataframe representing the Renko chart with columns 't', 'o', 'c'.
+    """
+
+    renko_data = []
+    renko_columns = [cfg.TIMES, cfg.OPENS, cfg.HIGHS, cfg.LOWS, cfg.CLOSES]
+
+    # Initialize the first brick
+    _unlinked = round((df['o'].iloc[0]   - base) / brick_size) * brick_size if not link_to_base else 0     
+    last_brick_close = base + _unlinked
+
+    # Calculate the brick size dynamically if percentage_based is True
+    for row in df.itertuples():
+        current_close = row.c
+        current_timestamp = row.t
+        
+        # Calculate the difference between the current close and the last brick close
+        price_diff = current_close - last_brick_close
+        
+        # Check if the price movement is sufficient to form a new brick
+        if abs(price_diff) >= brick_size:
+            # Determine the number of bricks to add
+            num_bricks = int(abs(price_diff) // brick_size)
+            
+            for _ in range(num_bricks):
+                if price_diff > 0:
+                    # Upward brick
+                    new_brick_close=last_brick_close + brick_size
+                else:
+                    # Downward brick
+                    new_brick_close = last_brick_close - brick_size
+                
+                last = round(last_brick_close, precision)
+                new = round(new_brick_close, precision)
+                
+                # Append the new brick to the Renko data
+                renko_data.append([
+                    current_timestamp,
+                    last,
+                    new if price_diff >= 0 else last,
+                    new if price_diff < 0 else last,
+                    new                    
+                ])
+                
+                # Update the last brick close
+                last_brick_close = new_brick_close
+    
+    # Create the Renko dataframe
+    renko_df = pd.DataFrame(renko_data, columns=renko_columns)
+    return renko_df
 
 
 class TsSliced:
@@ -281,22 +449,36 @@ class TsSliced:
 ## The only required methods are paint() and boundingRect() 
 ## (see QGraphicsItem documentation)
 class CandleBarItem(pg.GraphicsObject):
-    def __init__(self, charttype, timeseries, start, end, chartprops=cfg.D_CHARTPROPS):
+    def __init__(self, charttype, timeseries : Timeseries, start, end, chartprops=cfg.D_CHARTPROPS):
         pg.GraphicsObject.__init__(self)
         self.is_cbl=True
         self.timeseries = timeseries  ## data must have fields: time, open, close, min, max
-        self.charttype=charttype
         self.symbol=timeseries.symbol
         self.datasource=timeseries.datasource        
         self.timeframe=self.tf=timeseries.timeframe
-        self.tf_label=timeseries.tf_label
+        self.tf_label=timeseries.tf_label       
+        self.charttype=charttype
+        self.chartprops=dict(chartprops)
+        
+        # Replace raw source dataframe with Renko before assigning timeseries arrays
+        if charttype=="Renko" and not self.timeseries.is_renko:
+            _ts=self.timeseries
+            _ts.data=_ts.create_renko(_ts.data, self.chartprops, precision=chtl.precision(self.symbol))
+            df=_ts.data
+            if start:
+                x=start
+                for i in range(df.index):
+                    df.index[i]=x
+                    x+=1
+            _ts.is_renko=True
+                    
         self.bars=timeseries.bars
         self.times=timeseries.times
         self.highs=timeseries.highs
         self.lows=timeseries.lows
+        
         self.start=start
         self.end=end
-        self.chartprops=dict(chartprops)
 
         self.ymax=timeseries.ymax
         self.ymin=timeseries.ymin
@@ -312,7 +494,7 @@ class CandleBarItem(pg.GraphicsObject):
         w=1/3
         df= self.timeseries.data.iloc[self.start:self.end]
         
-        if(charttype=='Candle'):
+        if charttype=='Candle':
             p.setPen(pg.mkPen(self.chartprops[cfg.framecolor],width=0.7)) 
             bull_brush=pg.mkBrush(self.chartprops[cfg.bull])
             bear_brush=pg.mkBrush(self.chartprops[cfg.bear])
@@ -326,7 +508,7 @@ class CandleBarItem(pg.GraphicsObject):
                     p.setBrush(bull_brush)
                 p.drawRect(QtCore.QRectF(t-w, row.o, w*2, row.c-row.o))
 
-        elif(charttype=='Bar'):
+        elif charttype=='Bar':
             p.setPen(pg.mkPen(self.chartprops[cfg.barcolor],width=0.7))
             for row in df.itertuples():
                 t=row.Index
@@ -335,7 +517,7 @@ class CandleBarItem(pg.GraphicsObject):
                 p.drawLines([QtCore.QPointF(t, row.c), QtCore.QPointF(t+w, row.c),
                     QtCore.QPointF(t, row.o), QtCore.QPointF(t-w, row.o)])
         
-        elif(charttype=="HeikinAshi"):
+        elif charttype=="HeikinAshi":
             ha_df=self.timeseries.heikin_ashi(self.start, self.end)
             bull_pen=pg.mkPen(self.chartprops[cfg.bull], width=2)
             bear_pen=pg.mkPen(self.chartprops[cfg.bear], width=2)
@@ -352,6 +534,25 @@ class CandleBarItem(pg.GraphicsObject):
                 if row.h!=row.l:
                     p.drawLine(QtCore.QPointF(t, row.l), QtCore.QPointF(t, row.h))
                 p.drawRect(QtCore.QRectF(t-w, row.o, w*2, row.c-row.o))
+        
+
+        elif charttype=="Renko":
+            bull_pen=pg.mkPen(self.chartprops[cfg.bull], width=0.1)
+            bear_pen=pg.mkPen(self.chartprops[cfg.bear], width=0.1)
+            bull_brush=pg.mkBrush(self.chartprops[cfg.bull])
+            bear_brush=pg.mkBrush(self.chartprops[cfg.bear])
+            for row in self.timeseries.data.itertuples():
+                t=row.Index
+                if row.o > row.c:
+                    p.setPen(bear_pen)
+                    p.setBrush(bear_brush)
+                else:
+                    p.setPen(bull_pen)
+                    p.setBrush(bull_brush)
+                p.drawRect(QtCore.QRectF(t-w, row.o, w*2, row.c-row.o))
+
+        else:
+            raise ValueError(f"Invalid {charttype=}, should be in {cfg.CHARTTYPES}")
 
         p.end()
     

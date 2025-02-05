@@ -1,6 +1,7 @@
 import PySide6
 from PySide6 import QtWidgets,QtCore, QtGui
 import math, time, datetime
+import pandas as pd
 import numpy as np
 import pyqtgraph as pg
 from pyqtgraph import Point, ROI
@@ -16,7 +17,7 @@ import uitools
 from fetcher import FetcherMT5
 
 #debugging section
-from _debugger import _print,_printcallers,_exinfo,_ptime,_c,_p,_pc,_pp,_fts
+from _debugger import *
 
 class DrawProps:
     def config_props(self,mwindow,props=None,caller=None):
@@ -2405,7 +2406,6 @@ class AltPlotWidget(pg.PlotWidget):
         self.precision=chtl.precision(item.symbol)
         self.lc_item=lc_item
         ci=item
-        ts=ci.timeseries
         self.sigDeletePreviousThread.emit()
         try: 
             self.lc_thread.wait()
@@ -2592,21 +2592,67 @@ class AltPlotWidget(pg.PlotWidget):
                 fetch=self.mwindow.fetch,start=start,end=end,chartprops=self.chartprops)
             self.addItem(item)
         return item
-        # self.vb.update()
     
+
     def redraw_lc(self): #update last_candle
-        if self.chartitem is not None and self.lc_thread.lc is not None:
-            ts=self.chartitem.timeseries
-            ts.update_ts(self.lc_thread.lc)
-            self.lc_item=self.redraw_chartitem(self.lc_item,start=-1)
+        if self.lc_thread.lc is None or self.chartitem is None:
+            return
+        
+        ts=self.chartitem.timeseries
+        
+        if self.chartitem.charttype == "Renko":
+            lcdf=self.lc_thread.lc['data']
+
+            # Update the last candle with raw candle to provide for PriceLine fucntionality
+            if lcdf['t'].iloc[-1] == ts.data['t'].iloc[-1]:
+                # Update the last candle with raw candle to provide for PriceLine fucntionality
+                ts.data.iloc[-1] = self.lc_thread.lc['data'].iloc[-1]
+            # Add the raw candle to the dataframe            
+            else:
+                ts.data=pd.concat([ts.data,lcdf]) # add the new raw candle for PriceLine indication
+                ts.data.reset_index(drop=True,inplace=True)
+
+            return
+        
+        ts.update_ts(self.lc_thread.lc)
+        self.lc_item=self.redraw_chartitem(self.lc_item,start=-1)
+        
+        return
 
     def append_inc(self):
-        if self.chartitem!=None and self.lc_thread.incs!=None:
-            # passed from NewThread's self.incs, [:-1] to ignore last candle 
-            # and leave for consideration interims only (typically a single candle):
-            interim_candles=self.lc_thread.incs['data'][:-1]
-            self.chartitem.timeseries.update_ts(dict(data=interim_candles,complete=None))
-            self.chartitem=self.redraw_chartitem(self.chartitem)
+        if self.chartitem is None or self.lc_thread.incs is None:
+            return
+
+        ts=self.chartitem.timeseries
+        # passed from NewThread's self.incs, [:-1] to ignore last candle 
+        # and leave for consideration interims only (typically a single candle):
+        interim_candles=self.lc_thread.incs['data'][:-1]
+
+        if self.chartitem.charttype == "Renko":
+            # Separate the last raw candle from the dataframe
+            ts.data=ts.data[:-1] 
+            # _debug_sound()    
+            last_brick_close=ts.data['c'].iloc[-1]
+
+            _df=tmss.Timeseries.create_renko(interim_candles,
+                                             self.chartprops,
+                                             base=last_brick_close,
+                                             link_to_base=True,
+                                             precision=chtl.precision(self.symbol))   
+            
+            # add new renko candle(s) if any
+            if not _df.empty: 
+                ts.data=pd.concat([ts.data,_df])
+                ts.data.reset_index(drop=True,inplace=True)
+                # redraw the main renko item
+                self.chartitem=self.redraw_chartitem(self.chartitem) 
+        
+            return
+        
+        self.chartitem.timeseries.update_ts(dict(data=interim_candles,complete=None))
+        self.chartitem=self.redraw_chartitem(self.chartitem)
+
+        return
             
     def symb_change(self):
         symb=self.eline.text().strip().upper() #strip of spaces and capitalize
@@ -2743,7 +2789,7 @@ class NewThread(QtCore.QThread):
         # self.loop.exec()
         super().run()
 
-def set_chart(plt,symbol=None,timeframe=None):
+def set_chart(plt : AltPlotWidget,symbol=None,timeframe=None):
     old_item=plt.chartitem
     old_lc_item=plt.lc_item
     symb=symbol if symbol is not None else old_item.symbol

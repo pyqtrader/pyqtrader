@@ -69,7 +69,7 @@ def ray_mode(state,action):
 def precision(symb):
     if symb[3:]=='JPY' or symb[:3] in  ('XAU','XAG','BCO'):
         return 3
-    elif symb[:3] in ('BTC'):
+    elif symb[:3] in ('BTC') or symb[:4] in ('DASH'):
         return 2
     else:
         return 5

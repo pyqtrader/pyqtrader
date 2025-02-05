@@ -1,12 +1,16 @@
 #debugger
 
 
-__all__=['_print','_printcallers','_exinfo','_c','_pc',
-         '_p','_pp','_fts',"_ptime","comparestr", "_time_performance"]
+__all__=['_print','_printcallers','_exinfo','_c','_pc', "_callers",
+         '_p','_pp','_fts',"_ptime","comparestr", "_time_performance",
+         "_debug_sound"]
 
 import inspect
 import sys
 import time, datetime
+import playsound
+
+import cfg
 
 myself=lambda *args: inspect.stack()[2].function
 _print=lambda *args: print(_c(),myself()+': \n',*args)
@@ -66,3 +70,6 @@ def _time_performance(func):
         print(f"Finished {func.__name__!r} in {run_time*1000:.5f} ms")
         return value
     return wrapper_timer
+
+def _debug_sound():
+    playsound.playsound(cfg.ASSETS_DIR+"service-login.oga", block=False)

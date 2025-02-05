@@ -1312,6 +1312,11 @@ class MT5IntegrationDialog(QtWidgets.QDialog):
         self.layout.addWidget(self.options_line_edit)
         self.options_line_edit.setText(self.mwindow.props.get('mt5_server_options', ''))
 
+        # Checkbox for "Don't eliminate .exe processes"
+        self.no_exe_kill_checkbox = QtWidgets.QCheckBox("Don't eliminate .exe processes")
+        self.layout.addWidget(self.no_exe_kill_checkbox)
+        self.no_exe_kill_checkbox.setChecked(self.mwindow.props.get('mt5_dont_kill_exe', False))
+
        # Horizontal line separator
         separator = QtWidgets.QFrame()
         separator.setFrameShape(QtWidgets.QFrame.HLine)
@@ -1350,11 +1355,132 @@ class MT5IntegrationDialog(QtWidgets.QDialog):
         self.mwindow.props['mt5_executable_path'] = self.mt5_executable_path_line_edit.text()
         self.mwindow.props['mt5_server_options'] = self.options_line_edit.text()       
         self.mwindow.props['mt5_headless_mode_enabled'] = self.headless_mode_checkbox.isChecked()
-        
+        self.mwindow.props['mt5_dont_kill_exe'] = self.no_exe_kill_checkbox.isChecked()
+
         if a and b=='':
             simple_message_box("Error notification",icon=QtWidgets.QMessageBox.Critical,
             text="You must specify path to python.exe if you want to enable MetaTrader 5 integration")
         else:
             simple_message_box("Restart notification",icon=QtWidgets.QMessageBox.Information,
                             text="Restart is required for the changes to take effect")
+            self.close()
+
+class RenkoDialog(QtWidgets.QDialog):
+    def __init__(self, mwindow):
+        super().__init__()
+        self.setWindowTitle("Renko")
+        # self.setGeometry(100, 100, 300, 250)
+        self.mwindow=mwindow
+        self.mprops=mwindow.props
+        plt=mwindow.mdi.activeSubWindow().plt
+        self.chartprops=plt.chartprops
+        
+        layout = QtWidgets.QVBoxLayout()
+        
+        # Radio Buttons Group
+        self.option_button_group = QtWidgets.QButtonGroup(self)
+        self.option_button_group.setExclusive(True)
+        
+        self.flat_radio = QtWidgets.QRadioButton("Flat")
+        self.percent_radio = QtWidgets.QRadioButton("Percent")
+        self.option_button_group.addButton(self.flat_radio)
+        self.option_button_group.addButton(self.percent_radio)
+
+        # Initialize buttons
+        if self.chartprops.get("renko_mode", False)== cfg.RENKO_PERCENT or \
+            self.mprops.get("renko_mode")==cfg.RENKO_PERCENT or \
+            cfg.RENKO_DMODE==cfg.RENKO_PERCENT:
+    
+            self.percent_radio.setChecked(True)        
+    
+        else:
+            self.flat_radio.setChecked(True)
+
+        
+        layout.addWidget(self.flat_radio)
+        
+        # Flat Spin Boxes
+        self.flat_spin_layout = QtWidgets.QFormLayout()
+        self.flat_base_value = QtWidgets.QDoubleSpinBox()
+        self.flat_base_value.setDecimals(5)
+        self.flat_base_value.setMinimum(00000.00000)
+        self.flat_base_value.setMaximum(99999.99999)
+        self.flat_base_value.setSingleStep(0.1)
+        self.flat_base_value.setValue(self.identify_value("renko_flat_base"))
+
+        self.flat_brick_size = QtWidgets.QDoubleSpinBox()
+        self.flat_brick_size.setDecimals(5)
+        self.flat_brick_size.setMinimum(00000.00000)
+        self.flat_brick_size.setMaximum(99999.99999)
+        self.flat_brick_size.setSingleStep(0.001)
+        self.flat_brick_size.setValue(self.identify_value("renko_flat_brick",0.01))
+
+        self.flat_spin_layout.addRow(QtWidgets.QLabel("Base value:"), self.flat_base_value)
+        self.flat_spin_layout.addRow(QtWidgets.QLabel("Brick size:"), self.flat_brick_size)
+        layout.addLayout(self.flat_spin_layout)
+        
+        layout.addWidget(self.percent_radio)
+        
+        # Percent Spin Boxes
+        self.percent_spin_layout = QtWidgets.QFormLayout()
+        self.percent_base_value = QtWidgets.QDoubleSpinBox()
+        self.percent_base_value.setDecimals(5)
+        self.percent_base_value.setMinimum(00000.00000)
+        self.percent_base_value.setMaximum(99999.99999)
+        self.percent_base_value.setSingleStep(0.1)
+        self.percent_base_value.setValue(self.identify_value("renko_percent_base"))
+
+        self.percent_brick_size = QtWidgets.QDoubleSpinBox()
+        self.percent_brick_size.setDecimals(2)
+        self.percent_brick_size.setMinimum(00.00)
+        self.percent_brick_size.setMaximum(100.00)
+        self.percent_brick_size.setSingleStep(0.1)
+        self.percent_brick_size.setValue(self.identify_value("renko_percent_brick"))
+
+        self.percent_spin_layout.addRow(QtWidgets.QLabel("Base value:"), self.percent_base_value)
+        self.percent_spin_layout.addRow(QtWidgets.QLabel("Brick size, %:"), self.percent_brick_size)
+        layout.addLayout(self.percent_spin_layout)
+        
+        self.setLayout(layout)
+
+        edb=EmbeddedDialogBox('Reset','Apply','Cancel','Ok',default_button=2)
+        layout.addWidget(edb)
+        edb.btn[0].clicked.connect(lambda *args:    (self.flat_base_value.setValue(cfg.RENKO_DFLAT_BASE),
+                                                    self.flat_brick_size.setValue(cfg.RENKO_DFLAT_BRICK),
+                                                    self.percent_base_value.setValue(cfg.RENKO_DPERCENT_BASE),
+                                                    self.percent_brick_size.setValue(cfg.RENKO_DPERCENT_BRICK)))
+        edb.btn[1].clicked.connect(self.apply)
+        edb.btn[2].clicked.connect(self.close)
+        edb.btn[3].clicked.connect(lambda *args: self.apply(close=True))
+
+        self.exec()
+    
+    def identify_value(self, name: str, default_value : float = 1.0):
+        v=self.chartprops.get(name, None) 
+        if v is not None:
+            return v
+            
+        v=self.mprops.get(name, None)
+        if v is not None:
+            return v
+
+        return default_value
+    
+    def apply(self, close=False):
+        mode=cfg.RENKO_FLAT if self.flat_radio.isChecked() else cfg.RENKO_PERCENT
+        self.mprops['renko_mode']=mode
+        self.chartprops['renko_mode']=mode
+        
+        self.mprops['renko_flat_base']=self.flat_base_value.value()
+        self.chartprops['renko_flat_base']=self.flat_base_value.value()
+        self.mprops['renko_flat_brick']=self.flat_brick_size.value()
+        self.chartprops['renko_flat_brick']=self.flat_brick_size.value()
+        self.mprops['renko_percent_base']=self.percent_base_value.value()
+        self.chartprops['renko_percent_base']=self.percent_base_value.value()
+        self.mprops['renko_percent_brick']=self.percent_brick_size.value()
+        self.chartprops['renko_percent_brick']=self.percent_brick_size.value()
+        
+        self.mwindow.window_act("Renko")
+
+        if close:
             self.close()

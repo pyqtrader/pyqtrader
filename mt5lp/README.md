@@ -21,7 +21,7 @@ This Linux port utilizes the mt5linux [library](https://github.com/lucas-campagn
     pip install MetaTrader5
     ```
 
-5. Install the packages listed in `requirements.txt` on both **Linux**:
+5. Install the packages listed in `requirements.txt` of this directory on both **Linux**:
 
     ```
     pip install -r requirements.txt
