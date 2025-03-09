@@ -109,6 +109,7 @@
     <addaction name="menuIndicators"/>
     <addaction name="actionHeikin_Ashi"/>
     <addaction name="actionRenko"/>
+    <addaction name="actionSlice"/>
    </widget>
    <widget class="QMenu" name="menuTools">
     <property name="title">
@@ -918,6 +919,11 @@
   <action name="actionRenko">
    <property name="text">
     <string>Renko</string>
+   </property>
+  </action>
+  <action name="actionSlice">
+   <property name="text">
+    <string>Slice</string>
    </property>
   </action>
  </widget>

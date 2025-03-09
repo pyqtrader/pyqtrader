@@ -3,7 +3,7 @@
 ################################################################################
 ## Form generated from reading UI file 'qtd_proto.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.8.1
+## Created by: Qt User Interface Compiler version 6.8.2
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -267,6 +267,8 @@ class Ui_MainWindow(object):
         self.actionHeikin_Ashi.setObjectName(u"actionHeikin_Ashi")
         self.actionRenko = QAction(MainWindow)
         self.actionRenko.setObjectName(u"actionRenko")
+        self.actionSlice = QAction(MainWindow)
+        self.actionSlice.setObjectName(u"actionSlice")
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
         self.gridLayout = QGridLayout(self.centralwidget)
@@ -367,6 +369,7 @@ class Ui_MainWindow(object):
         self.menuInsert.addAction(self.menuIndicators.menuAction())
         self.menuInsert.addAction(self.actionHeikin_Ashi)
         self.menuInsert.addAction(self.actionRenko)
+        self.menuInsert.addAction(self.actionSlice)
         self.menuIndicators.addAction(self.actionAverage_True_Range)
         self.menuIndicators.addAction(self.actionBollinger_Bands)
         self.menuIndicators.addAction(self.actionMACD)
@@ -646,6 +649,7 @@ class Ui_MainWindow(object):
 #endif // QT_CONFIG(tooltip)
         self.actionHeikin_Ashi.setText(QCoreApplication.translate("MainWindow", u"Heikin Ashi", None))
         self.actionRenko.setText(QCoreApplication.translate("MainWindow", u"Renko", None))
+        self.actionSlice.setText(QCoreApplication.translate("MainWindow", u"Slice", None))
         self.menuFile.setTitle(QCoreApplication.translate("MainWindow", u"File", None))
         self.menuWindow.setTitle(QCoreApplication.translate("MainWindow", u"Window", None))
         self.menuChart.setTitle(QCoreApplication.translate("MainWindow", u"Chart", None))

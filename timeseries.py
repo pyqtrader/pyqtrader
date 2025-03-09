@@ -555,6 +555,11 @@ class CandleBarItem(pg.GraphicsObject):
             raise ValueError(f"Invalid {charttype=}, should be in {cfg.CHARTTYPES}")
 
         p.end()
+
+    def refresh(self, start=None, end=None):
+        self.start=start
+        self.end=end
+        self.generatePicture(self.charttype)
     
     def paint(self, p, *args):
         p.drawPicture(0, 0, self.picture)
@@ -589,6 +594,9 @@ class ChartLineItem(PlotCurveItem):
         prs=dict(chartprops)
         linecolor=prs[cfg.linecolor]
         self.setPen(linecolor)
+    
+    def refresh(self, start=None, end=None):
+        self.setData(self.timeseries.bars[start:end],self.timeseries.closes[start:end])
 
 def plot_timeseries(symbol,ct,tf=None,ts=None,session=None,fetch=None,
     start=None,end=None,chartprops=cfg.D_CHARTPROPS):
@@ -933,3 +941,31 @@ class AltAxisItem(pg.AxisItem):
         values=super().tickValues(minVal,maxVal,size)
 
         return [values[0]]
+
+
+class TsStub:
+    ''' 
+    Stub for Timeseries class
+    '''
+    def __init__(self, df):
+        self.data = df
+
+    @property
+    def times(self):
+        return self.data[cfg.TIMES].to_numpy()
+
+    @property
+    def opens(self):
+        return self.data[cfg.OPENS].to_numpy()
+
+    @property
+    def highs(self):
+        return self.data[cfg.HIGHS].to_numpy()
+
+    @property
+    def lows(self):
+        return self.data[cfg.LOWS].to_numpy()
+
+    @property
+    def closes(self):
+        return self.data[cfg.CLOSES].to_numpy()

@@ -3,7 +3,7 @@ from datetime import datetime
 
 PROGRAM_NAME='pyqtrader'
 
-VERSION='1.4.2'
+VERSION='1.4.3'
 
 DYNAMIC_QUERYING=True #continuous updating from the data provider, set False to turn off (no QTimer initiation) 
 
@@ -297,7 +297,8 @@ TRADE_RECORD= dict(
     open_time='open_time',
     open_price='open_price',
     close_time='close_time',
-    close_price='close_price'
+    close_price='close_price',
+    comment='comment'
 )
 
 # GUI message timeout in seconds to avoid blocking of GUI by recurring messages,

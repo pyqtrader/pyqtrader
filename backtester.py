@@ -1,6 +1,6 @@
 import PySide6
 from PySide6.QtCore import QPointF, QRectF
-from PySide6 import QtGui
+from PySide6 import QtGui, QtWidgets
 import pyqtgraph as pg
 from pyqtgraph import Point
 import pandas as pd
@@ -33,6 +33,7 @@ class Trade:
     volume: float = None
     entry: dtPoint = dc.field(default_factory=dtPoint)
     close: dtPoint = dc.field(default_factory=dtPoint)
+    comment: str = None
 
     @property
     def profit(self):
@@ -65,6 +66,8 @@ class Trade:
         s+=f"Pips: {round(self.pips,1)}"
         if self.profit is not None:
             s+=f"\nProfit: {round(self.profit,2)}" 
+        if self.comment is not None:
+            s+=f"\nComment: {self.comment}" 
 
         return s.strip()
 
@@ -81,8 +84,18 @@ class TradeRecord:
         tr_set=set(cfg.TRADE_RECORD.values())
         tr_set.remove(cfg.TRADE_RECORD['id_number'])
         tr_set.remove(cfg.TRADE_RECORD['volume'])
-        assert tr_set-set(df.columns)==set(), "Source file misses some required columns"
+        if not tr_set-set(df.columns)==set(): 
+            simple_message_box("Backtest", 
+                               text=f"Source file {filepath} misses some required columns",
+                               icon=QtWidgets.QMessageBox.Warning)
+            raise ValueError(f"Source file {filepath} misses some required columns")
 
+        if not df[cfg.TRADE_RECORD['trade_type']].isin([TradeType.buy, TradeType.sell]).all():
+            simple_message_box("Backtest", 
+                               text=f"Source file {filepath} contains invalid trade types",
+                               icon=QtWidgets.QMessageBox.Warning)
+            raise ValueError(f"Source file {filepath} contains invalid trade types")
+            
         record=[]
         for i,row in df.iterrows():
             
@@ -99,13 +112,15 @@ class TradeRecord:
             trade.symbol=row[cfg.TRADE_RECORD['symbol']]
             
             h=cfg.TRADE_RECORD['trade_type']
-            assert row[h]==TradeType.buy or row[h]==TradeType.sell, "Invalid trade type"
             trade.trade_type=row[h]
             
             trade.entry.dt=row[cfg.TRADE_RECORD['open_time']]            
             trade.entry.y=row[cfg.TRADE_RECORD['open_price']]
             trade.close.dt=row[cfg.TRADE_RECORD['close_time']]            
             trade.close.y=row[cfg.TRADE_RECORD['close_price']]
+
+            if (h:=cfg.TRADE_RECORD['comment']) in df.columns: 
+                trade.comment=row[h]
 
             record.append(trade)
 
@@ -160,17 +175,26 @@ class DrawTradeRecord (pg.GraphicsObject):
                     break
         elif ev.button() == pg.QtCore.Qt.RightButton:
             menu = pg.QtWidgets.QMenu()
+            menu.addSection("Backtest")
+            refresh_action = menu.addAction("Refresh")
+            menu.addSeparator()
             remove_action = menu.addAction("Remove")
             action = menu.exec(ev.screenPos().toQPoint())
             
             if action == remove_action:
                 self.plt.sigTimeseriesChanged.disconnect(self.ts_change)
                 self.plt.removeItem(self)
+            elif action == refresh_action:
+                self.refresh()
     
     def ts_change(self,ts):
         self.selected_record=self.trade_record.select('symbol', ts.symbol)
         self.selected_record.apply_timeseries(ts)
+
+    def refresh(self):
+        self.set_props(self.props)
         self.generatePicture()
+        self.plt.vb.update()
 
     def set_props(self,props):
         if not props:   
@@ -178,8 +202,17 @@ class DrawTradeRecord (pg.GraphicsObject):
         self.props=props
         self.trade_record=TradeRecord.read_from_csv(props['filename'])
         self.selected_record=self.trade_record.select('symbol', self.plt.symbol)
+
+        if not self.selected_record.record:
+            simple_message_box("Backtest", 
+                text=f"No {self.plt.symbol} found in the source file.\nCheck the symbol name.",
+                icon=QtWidgets.QMessageBox.Warning)
+            return
+
         self.selected_record.apply_timeseries(self.plt.chartitem.timeseries)
         self.generatePicture()
+
+        return
 
     def save_props(self):
         return self.props

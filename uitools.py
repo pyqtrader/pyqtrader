@@ -1484,3 +1484,61 @@ class RenkoDialog(QtWidgets.QDialog):
 
         if close:
             self.close()
+
+class SliceDialog(QtWidgets.QDialog):
+    def __init__(self, mwindow):
+        super().__init__()
+
+        if not mwindow.props.get('Offline', False):
+            simple_message_box("Slice",
+                               text="Slice dialog is only available in Offline mode. Click File->Offline to enable it.",
+                               icon=QtWidgets.QMessageBox.Information)
+            return
+
+        self.setWindowTitle("Slice")
+        plt=mwindow.mdi.activeSubWindow().plt
+        self.vb=plt.getViewBox()
+        self.chartitem=plt.chartitem
+        self.length=len(self.chartitem.bars)
+
+        layout = QtWidgets.QVBoxLayout()
+        self.start = QtWidgets.QSpinBox()
+        self.start.setMinimum(-self.length)
+        self.start.setMaximum(self.length)
+        self.start.setSingleStep(100)
+        self.start.setValue(0)
+        self.end = QtWidgets.QSpinBox()
+        self.end.setMinimum(-self.length)
+        self.end.setMaximum(self.length)
+        self.end.setSingleStep(100)
+        self.end.setValue(0)
+        layout.addWidget(QtWidgets.QLabel("Start:"))
+        layout.addWidget(self.start)
+        layout.addWidget(QtWidgets.QLabel("End:"))
+        layout.addWidget(self.end)
+        
+        self.setLayout(layout)
+
+        edb=EmbeddedDialogBox('Reset','Apply','Cancel','Ok',default_button=2)
+        layout.addWidget(edb)
+        edb.btn[0].clicked.connect(lambda *args:    (self.start.setValue(0),
+                                                    self.end.setValue(0)))
+        edb.btn[1].clicked.connect(self.apply)
+        edb.btn[2].clicked.connect(self.close)    
+        edb.btn[3].clicked.connect(lambda *args: self.apply(close=True))
+
+        self.exec()    
+        
+    def apply(self, close=False):
+        start=self.start.value()
+        end=self.end.value()
+        conv = lambda x: x if x>0 else self.length+x if x<0 else None
+        
+        start=conv(start)
+        end=conv(end)
+
+        self.chartitem.refresh(start, end)
+
+        self.vb.update()
+        if close:
+            self.close()        

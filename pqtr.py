@@ -18,6 +18,7 @@ import studies as stds, studies
 import labelings as lbls,labelings
 import fetcher as ftch,fetcher
 import styles
+import backtester
 from drawings import AltPlotWidget as APW
 
 import overrides as ovrd, overrides
@@ -229,6 +230,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionLineChart.triggered.connect(lambda *args: self.window_act("Line"))
         self.ui.actionHeikin_Ashi.triggered.connect(lambda *args: self.window_act("HeikinAshi"))
         self.ui.actionRenko.triggered.connect(lambda *args: uitools.RenkoDialog.__call__(self))
+        self.ui.actionSlice.triggered.connect(lambda *args: uitools.SliceDialog.__call__(self))
     #Timeframes
         self.ui.actionMN.triggered.connect(lambda *args: self.window_act("MN1"))
         self.ui.actionW1.triggered.connect(lambda *args: self.window_act("W1"))
@@ -1097,7 +1099,6 @@ class MDIWindow(QtWidgets.QMainWindow):
                     f.write(stj)
 
         if action=='Backtest':
-            import backtester
             if not os.path.isdir(f'{cfg.FILES_DIR}'):
                 os.mkdir(f'{cfg.FILES_DIR}')
             fileName = QtWidgets.QFileDialog.getOpenFileName(self,"Load Trade Record", 
