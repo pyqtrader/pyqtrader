@@ -178,6 +178,7 @@ class MDIWindow(QtWidgets.QMainWindow):
         self.ui.actionNew.triggered.connect(lambda *args: self.window_act("New"))
         self.ui.actionOpen.triggered.connect(lambda *args: self.window_act('Open'))
         self.ui.actionSave_As.triggered.connect(lambda *args: self.window_act('Save As'))
+        self.ui.actionData_Folder.triggered.connect(lambda *args: self.window_act('Data Folder'))
         self.ui.actionMT5_Integration.triggered.connect(lambda *args: uitools.MT5IntegrationDialog.__call__(self))
         self.ui.actionOffline.triggered.connect(lambda *args: self.window_act('Offline'))
         self.ui.actionLogin.triggered.connect(lambda *args: self.window_act('Login'))
@@ -1097,6 +1098,17 @@ class MDIWindow(QtWidgets.QMainWindow):
                     fname=fname+f'.{ext}'
                 with open(fname, 'w') as f:
                     f.write(stj)
+
+        if action == 'Data Folder':
+            import subprocess
+            data_folder = cfg.DATA_SYMBOLS_DIR
+            try:
+                # Try to open the default file manager
+                subprocess.run(['xdg-open', data_folder])
+            except Exception as e:
+                text=f"Failed to open file manager: {e}"
+                uitools.simple_message_box("Data Folder", text=text)
+                print(text)
 
         if action=='Backtest':
             if not os.path.isdir(f'{cfg.FILES_DIR}'):

@@ -36,6 +36,7 @@
     <addaction name="actionNew"/>
     <addaction name="actionOpen"/>
     <addaction name="actionSave_As"/>
+    <addaction name="actionData_Folder"/>
     <addaction name="actionMT5_Integration"/>
     <addaction name="actionOffline"/>
     <addaction name="separator"/>
@@ -924,6 +925,15 @@
   <action name="actionSlice">
    <property name="text">
     <string>Slice</string>
+   </property>
+  </action>
+  <action name="actionData_Folder">
+   <property name="icon">
+    <iconset>
+     <normaloff>Pyqtrader/.system/assets/open_file_manager_icon1.png</normaloff>Pyqtrader/.system/assets/open_file_manager_icon1.png</iconset>
+   </property>
+   <property name="text">
+    <string>Data Folder</string>
    </property>
   </action>
  </widget>

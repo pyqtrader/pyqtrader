@@ -5,6 +5,8 @@ from Pyqtrader.Apps.customiz import CustomPolyitem
 
 from _debugger import _p
 
+DEGREE = 2
+SOFT = True
 BARSBACK=50
 TOP='\u2B99'
 BOTTOM='\u2B9B'
@@ -30,20 +32,29 @@ class Fractals(CustomPolyitem):
             self.fractals_calc()
             self._timeseries_length_stored=len(self.timeseries.closes)
     
-    def logic(self, barsback=BARSBACK) -> list[list[bool,int,float]]:
-        s=self.timeseries
-        fractals=[]
-        sh=s.highs[-barsback if barsback!=None else None:]
-        sl=s.lows[-barsback if barsback!=None else None:]
-        bars=s.bars[-barsback if barsback!=None else None:]
+    def logic(self, degree=DEGREE, barsback=BARSBACK, soft=SOFT) -> list[list[bool, int, float]]:
+        s = self.timeseries
+        fractals = []
+        sh = s.highs[-barsback if barsback is not None else None:]
+        sl = s.lows[-barsback if barsback is not None else None:]
+        bars = s.bars[-barsback if barsback is not None else None:]
 
-        for i in range (2,len(sh)-2):
-            if sh[i-1]<sh[i]>sh[i+1] and sh[i-2]<sh[i]>sh[i+2]:
-                fractals.append([True,bars[i],sh[i]])
-            if sl[i-1]>sl[i]<sl[i+1] and sl[i-2]>sl[i]<sl[i+2]:
-                fractals.append([False,bars[i],sl[i]])
-        
+        for i in range(degree, len(sh) - degree):
+            # Soft or strict comparison operators
+            if soft:
+                high_condition = all(sh[i] >= sh[i + offset] for offset in range(-degree, degree + 1) if offset != 0)
+                low_condition = all(sl[i] <= sl[i + offset] for offset in range(-degree, degree + 1) if offset != 0)
+            else:
+                high_condition = all(sh[i] > sh[i + offset] for offset in range(-degree, degree + 1) if offset != 0)
+                low_condition = all(sl[i] < sl[i + offset] for offset in range(-degree, degree + 1) if offset != 0)
+
+            if high_condition:
+                fractals.append([True, bars[i], sh[i]])
+            if low_condition:
+                fractals.append([False, bars[i], sl[i]])
+
         return fractals
+
 
     @staticmethod
     def mark(itm : TextItem, pos):

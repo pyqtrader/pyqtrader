@@ -10,5 +10,4 @@ PySide6_Essentials
 pytz
 Requests
 rpyc
-playsound
 

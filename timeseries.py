@@ -384,67 +384,6 @@ def renko_flat(df : pd.DataFrame,
     return renko_df
 
 
-class TsSliced:
-    """
-    A class representing a slice of Timeseries data.
-    
-    Parameters
-    ----------
-    ts : Timeseries
-        The Timeseries object to be sliced.
-    ts_slice : slice
-        The slice to be applied to the Timeseries data.
-    
-    Attributes
-    ----------
-    bars : numpy.ndarray
-        The array of tick values of the sliced data.
-    data : pandas.DataFrame
-        The DataFrame of the sliced data.
-    symbol : str
-        The symbol of the Timeseries.
-    timeframe : str
-        The timeframe of the Timeseries.
-    """
-    def __init__(self, ts : Timeseries, ts_slice : slice):
-        
-        x=len(ts.data)
-
-        if ts_slice:
-            assert ts_slice.step is None, "ts_slice step is not supported"
-        
-        if ts_slice.start and x <= abs(ts_slice.start):
-                ts_slice.start = None
-        
-        if ts_slice.stop and x <= abs(ts_slice.stop):
-            ts_slice.stop = None
-        
-        self.bars=ts.bars[ts_slice]
-        self.data=ts.data[ts_slice].reset_index(drop=True)
-        
-        self.symbol=ts.symbol
-        self.timeframe=self.tf=ts.timeframe
-    
-    @property
-    def times(self):
-        return self.data[cfg.TIMES].to_numpy()
-
-    @property
-    def opens(self):
-        return self.data[cfg.OPENS].to_numpy()
-
-    @property
-    def highs(self):
-        return self.data[cfg.HIGHS].to_numpy()
-
-    @property
-    def lows(self):
-        return self.data[cfg.LOWS].to_numpy()
-
-    @property
-    def closes(self):
-        return self.data[cfg.CLOSES].to_numpy()
-
 ## Create a subclass of GraphicsObject.
 ## The only required methods are paint() and boundingRect() 
 ## (see QGraphicsItem documentation)
@@ -942,6 +881,71 @@ class AltAxisItem(pg.AxisItem):
 
         return [values[0]]
 
+
+####################
+# Auxiliary classes
+####################
+class TsSliced:
+    """
+    A class representing a slice of Timeseries data.
+    
+    Parameters
+    ----------
+    ts : Timeseries
+        The Timeseries object to be sliced.
+    ts_slice : slice
+        The slice to be applied to the Timeseries data.
+    
+    Attributes
+    ----------
+    bars : numpy.ndarray
+        The array of tick values of the sliced data.
+    data : pandas.DataFrame
+        The DataFrame of the sliced data.
+    symbol : str
+        The symbol of the Timeseries.
+    timeframe : str
+        The timeframe of the Timeseries.
+    """
+    def __init__(self, ts : Timeseries, ts_slice : slice):
+        
+        x=len(ts.data)
+
+        if ts_slice:
+            assert ts_slice.step is None, "ts_slice step is not supported"
+        
+        if ts_slice.start and x <= abs(ts_slice.start):
+                ts_slice.start = None
+        
+        if ts_slice.stop and x <= abs(ts_slice.stop):
+            ts_slice.stop = None
+        
+        self.bars=ts.bars[ts_slice]
+        self.data=ts.data[ts_slice].reset_index(drop=True)
+        
+        self.symbol=ts.symbol
+        self.timeframe=self.tf=ts.timeframe
+    
+    @property
+    def times(self):
+        return self.data[cfg.TIMES].to_numpy()
+
+    @property
+    def opens(self):
+        return self.data[cfg.OPENS].to_numpy()
+
+    @property
+    def highs(self):
+        return self.data[cfg.HIGHS].to_numpy()
+
+    @property
+    def lows(self):
+        return self.data[cfg.LOWS].to_numpy()
+
+    @property
+    def closes(self):
+        return self.data[cfg.CLOSES].to_numpy()
+    
 
 class TsStub:
     ''' 
