@@ -80,10 +80,11 @@ class TradeRecord:
     def read_from_csv(filepath):
         df=pd.read_csv(filepath)
 
-        # Ensure that the dataframe contains all required columns (id_number is not obligatory)
+        # Ensure that the dataframe contains all required columns (id_number, volume and comment are not obligatory)
         tr_set=set(cfg.TRADE_RECORD.values())
         tr_set.remove(cfg.TRADE_RECORD['id_number'])
         tr_set.remove(cfg.TRADE_RECORD['volume'])
+        tr_set.remove(cfg.TRADE_RECORD['comment'])
         if not tr_set-set(df.columns)==set(): 
             simple_message_box("Backtest", 
                                text=f"Source file {filepath} misses some required columns",
