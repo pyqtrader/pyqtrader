@@ -23,3 +23,9 @@ The manuals and demos are available on our YouTube @pyqtrader (https://www.youtu
 Currently, the market is accessed via MetaTrader 5 integration for Linux.  Read [mt5lp/README](https://github.com/pyqtrader/pyqtrader/blob/main/mt5lp/README.md) for detailed instructions.
 
 Legacy market access via Oanda's API is available but no longer supported.  Consult Oanda's official website regarding the API's setup and use.
+
+## Donate
+
+We welcome donations to support pyqtrader.
+
+BTC: bc1q80s9q6q30reqe84c7n3aspuw442d4f8ktefgj6
